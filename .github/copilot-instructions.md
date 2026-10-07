@@ -2,9 +2,14 @@
 
 > A demo environment that mimics a business‑critical retail transaction chain split across **on‑premises** and **Azure**, used to show how an *agentic operating model* (Azure Arc, Azure Monitor, Observability Agent, Azure SRE Agent and specialised agents) helps a small operations team run a hybrid landscape — without migrating first.
 
-- **Status:** v0.1 in progress (Azure‑only, Arc‑honest)
+- **Status:** private Stage 0 foundation deployed and verified; application and approved SRE healing not implemented (see `docs/deployment-stage0.md`)
 - **Stack:** Bicep · Python/FastAPI · PostgreSQL · Azure Service Bus · Azure Monitor · Azure Arc · Azure SRE Agent
 - **Not SAP:** the app is *SAP‑like*. Component names are generic on purpose.
+
+**Delivery source of truth:** [staged architecture and implementation plan](../docs/implementation-plan.md).
+The plan records proposed stages, deployment/reset/teardown requirements, verified
+product boundaries, and unresolved integration gates. The full estate below is
+the longer-term vision, not the first release or a description of existing code.
 
 ---
 
@@ -24,16 +29,18 @@ The demo answers one question:
 
 > *What can we apply today, in AI‑assisted and agentic IT operations, on a landscape that is — and will remain — hybrid?*
 
-## 2. Narrative: four layers
+## 2. Narrative: foundation, operational loop, optional specialists
 
 | Layer | Role | Message |
 |---|---|---|
 | **1 · Foundation** — Azure Arc + Azure Monitor / Log Analytics / Application Insights | One control and telemetry plane over on‑prem and cloud | *Agentic operations starts with observability, not with AI.* |
-| **2 · Analyst** — Observability Agent | Understands what is happening, what is affected, which dependencies are involved | Hypotheses and correlation, not actions |
-| **3 · Operator** — Azure SRE Agent | Observe → Diagnose → Prevent → Heal; proposes and (with approval) executes; records knowledge | *Operational work in, evidence‑backed outcomes out* |
-| **4 · Specialised agents** — Security (Defender), GitHub Copilot, Azure AI Foundry / Copilot Studio | Fix the code, secure the estate, add business context | A team of agents, humans keep the policy |
+| **2 · Operational loop** — Azure SRE Agent | Investigates, correlates evidence, proposes and (with configured approval) executes supported actions; records outcomes | *Operational work in, evidence‑backed outcomes out* |
+| **Optional analyst experience** — Azure Copilot Observability Agent | Azure Monitor-native chat, deep investigations, saved issues, and preview autonomous alert correlation; does not remediate resources | An alternative investigation/triage experience, not a prerequisite for SRE Agent |
+| **3 · Optional specialised agents** — Security (Defender), GitHub Copilot, Microsoft Foundry / Copilot Studio | Fix the code, secure the estate, add business context | A team of agents, humans keep the policy |
 
 Humans set policy and guardrails, approve actions and review outcomes. Agents investigate, correlate, document and remediate.
+SRE Agent already performs analysis; do not stage a redundant Observability-to-SRE
+handoff unless a separately verified integration demonstrates a distinct outcome.
 
 ## 3. Session flow (60 min)
 
@@ -51,21 +58,21 @@ Humans set policy and guardrails, approve actions and review outcomes. Agents in
 
 ### Demo 1 — Transaction degradation across the boundary (agentic NOC)
 
-**Story.** Promotion morning. Prices are maintained in the on‑prem ERP and used by the cloud pricing platform; accepted transactions are posted back to the ERP ledger through a queue. Nothing is "down", but checkout latency rises and unposted sales grow in two countries just before stores open.
+**Story.** Promotion morning. Prices are maintained in the on‑prem ERP and used by the cloud pricing platform; accepted transactions are posted back to the ERP ledger through a queue. The first incident stops the posting worker while checkout stays healthy. Unposted sales grow, with a repeatable load profile making two countries dominate the initial signal. A shared stopped worker eventually affects all countries. Add checkout latency as a separate later scenario.
 
 **Flow (what the audience sees).**
 
-1. Anomaly detected (dynamic threshold): checkout p95 latency and posting backlog deviate from the normal promo‑morning curve.
-2. **Observability Agent** analyses impact and dependencies: which countries, which hop (cloud → on‑prem price lookup), which components.
-3. **SRE Agent** investigates: traces across the VPN, queue depth, last night's configuration change, a long‑running batch job on the ERP host.
+1. A deterministic static alert detects posting backlog or unposted sales in the fresh environment.
+2. **SRE Agent** analyses impact and dependencies: affected countries, transaction state, worker health, and available telemetry.
+3. The same agent investigates queue depth and the logged fault/change event. VPN and batch-job evidence belong to later profiles, not the initial incident.
 4. Root cause stated with evidence; symptoms separated from cause.
 5. Business impact in plain language: stores and brands affected per country, exposure window.
-6. Mitigation proposed (release backlog / restart poster / add cloud capacity).
+6. Mitigation proposed: restart the posting worker using a verified fixed-action path. Other actions require their own scenario and permission gates.
 7. Engineer approves.
-8. SRE Agent executes, confirms recovery, writes the RCA and stores the knowledge.
+8. SRE Agent executes the supported approved action, confirms recovery, writes the RCA and stores the knowledge. Until the SRE-to-Arc path is proven, show diagnosis and a human-run action explicitly instead.
 
-**Triggers:** `chaos/latency`, `chaos/backlog`, `chaos/batch-hog` (see §7).
-**Success criteria:** end‑to‑end in ≤ 12 min without a terminal; impact expressed per country; approval step visible; RCA produced.
+**Planned triggers:** `chaos/backlog` first; `chaos/latency` and `chaos/batch-hog` later (see §7). Scripts do not exist yet.
+**Target success criteria:** end‑to‑end in ≤ 12 min without a terminal after rehearsal; impact expressed per country; approval step visible; RCA produced. Deployment readiness and telemetry warm-up are measured separately.
 **Aside (60 s):** natural‑language questions to the estate ("which interfaces failed this week?").
 
 ### Walkthrough — inside the SRE Agent
@@ -79,14 +86,14 @@ Talk track, shown in the product where possible:
   - *Knowledge* — plain‑language runbooks and architecture notes (`runbooks/`).
   - *Business context* — store/brand/country mapping (`store-map.csv`).
   - *Integrations* — alert sources, ITSM, chat.
-- **Guardrails:** read‑only vs. act modes; per‑action approval and approver groups; action allow‑list (`allowed-actions.md`); least‑privilege RBAC on the agent identity; full audit trail; off switch; human review of RCAs.
-- **Honest limits:** preview status; only what telemetry reaches Azure; no coverage for non‑Arc platforms (e.g. proprietary Unix); quality depends on the context you give it.
+- **Guardrails:** explicitly set Review for every remediation response plan and scheduled task; verify the approver role; enforce fixed actions at the tool/executor boundary in addition to the documented allow-list; least-privilege RBAC; full audit trail; off switch; human review of RCAs. Review mode does not automatically gate every external-tool action.
+- **Honest limits:** verify current availability and preview surfaces; only connected telemetry is visible; non-Arc platforms may supply logs/API evidence without supported Arc host management; quality depends on context and verified integrations.
 
 ### Demo 2 — Prevent: proactive coexistence operations
 
 - **Morning landscape brief** across the four countries: interface backlog trend, batch SLA compliance, failed jobs with likely cause, changes in the last 24 h.
 - **Pre‑flight before peak day:** capacity headroom, queue health, certificate/patch status, replication gaps → green, or a proposed action.
-- **Headroom forecast** on the ERP host (disk/memory days‑to‑full) — quietly links operations to the hardware lifecycle decision.
+- **Headroom forecast** on the ERP host (disk/memory days‑to‑full) — requires sufficient history; show insufficient data or clearly labeled synthetic history in a fresh environment.
 - **Hygiene with approval:** one approve/snooze/explain card (restart stuck worker, clean logs).
 
 **Triggers:** `chaos/headroom`, `chaos/redundancy`, `chaos/cert`.
@@ -105,18 +112,18 @@ Proprietary Unix / non‑Arc platforms · ERP vendor architecture debate · Kube
 
 ## 5. Application design — RetailTx
 
-```
+```text
 pos-sim (4 countries × brands) ──POST /transaction──► cap-api (cloud)
                                                         │  sync GET /price/{sku} ──► erp-core (on‑prem)
-                                                        │  write cap-db
-                                                        └─► queue IDOC_POSTING ──► erp-poster (on‑prem) ──► erp-core ledger
+                                                        │  commit transaction + outbox in cap-db
+                                                        └─► outbox publisher ──► IDOC_POSTING ──► erp-poster ──► ERP ledger
 recon-job: accepted‑in‑cloud vs posted‑on‑prem → unposted € per country
 ```
 
 | Component | Side | Plays | Tech |
 |---|---|---|---|
 | `pos-sim` | on‑prem | stores / POS | Python load generator; profiles `baseline`, `promo`, `peak-day` |
-| `cap-api` | cloud | customer activity / pricing platform | FastAPI on 2 VMs behind LB; PostgreSQL Flexible |
+| `cap-api` | cloud | customer activity / pricing platform | FastAPI on 1 VM initially; PostgreSQL Flexible; 2 VMs + LB in redundancy profile |
 | `erp-core` | on‑prem | core ERP: price service + ledger | FastAPI + PostgreSQL |
 | `IDOC_POSTING` | cloud | interface layer | Azure Service Bus queue |
 | `erp-poster` | on‑prem | posting worker (single instance, by design) | Python worker |
@@ -124,17 +131,22 @@ recon-job: accepted‑in‑cloud vs posted‑on‑prem → unposted € per coun
 
 **Two dependencies, two concerns:** the *sync* price lookup carries the **latency** story; the *async* posting queue carries the **reliability** story. `unposted_eur` is the one business metric everything hangs on.
 
-**Telemetry contract.** OpenTelemetry → Application Insights (distributed trace across the VPN); custom metrics `checkout_latency_ms`, `checkout_failed_ratio`, `queue_depth`, `unposted_eur`, all dimensioned by `country` and `brand`; structured logs; Change Tracking on config files; host metrics via Azure Monitor Agent (through Arc on the on‑prem side).
+**Correctness contract.** Transactional outbox, stable transaction IDs, idempotent ERP ledger writes, bounded retries and dead-letter handling. Calculate unposted EUR from transaction state, not queue estimates. Report stale/unknown reconciliation explicitly; unposted sales are not necessarily lost revenue.
+
+**Telemetry contract.** OpenTelemetry → Application Insights with context propagated through HTTP and queue messages; checkout duration/error evidence and business backlog dimensioned by bounded `country` and `brand` values. Native Service Bus queue depth is queue-wide, not per country. Structured logs and explicit change events first; Change Tracking later. Host metrics via Azure Monitor Agent (through Arc on the simulated on-prem side).
 
 ## 6. Architecture by release
 
-### v0.1 — Azure‑only, Arc‑honest *(target: before rehearsal)*
+### v0.1 — Repeatable Azure-lite incident *(proposed)*
 
-- Two VNets in two regions, joined by **VPN Gateway** (real tunnel, real cross‑region latency). Region B plays the on‑prem datacenter.
-- "On‑prem" VMs are **onboarded to Azure Arc** (IMDS‑blocked evaluation pattern) and managed **only** through Arc: AMA, Change Tracking, Update Manager, Run Command.
-- Service Bus, PostgreSQL Flexible, Log Analytics, Application Insights, one workbook (*Retail transaction health* by country), dynamic‑threshold alerts.
-- **Azure SRE Agent** scoped to both resource groups + Arc machines, with runbooks, store map and action allow‑list (restart `erp-poster`, scale `cap-api`).
-- Observability Agent enabled on the workspace (see §11 for status risk).
+- Two peered VNets in one region, one cloud VM and one simulated-datacenter VM. Peering is not a VPN.
+- The simulated-datacenter host uses the documented **evaluation-only Azure Arc** pattern after bootstrap: remove VM extensions, disable the Azure guest agent, and block Azure IMDS. Azure owns backing hardware lifecycle; Arc owns guest operations.
+- Service Bus, PostgreSQL Flexible, Log Analytics, Application Insights, one country-level workbook, static alerts, and the backlog fault with undo.
+- **Azure SRE Agent** is the incident owner, with a reviewed knowledge pack and a verified approval-gated fixed-action path. No live remediation claim until that path passes its integration gate.
+- Deployment, readiness, reset, destruction, and residual-resource checks are part of the release. Observability Agent is optional, not a workspace-onboarding prerequisite.
+- Dynamic thresholds require historical data; native Service Bus message-count metrics do not support them. They are not the fresh-environment alert strategy.
+
+The diagram below is the **later expanded VPN profile**, not the v0.1 minimum:
 
 ```mermaid
 flowchart LR
@@ -165,76 +177,102 @@ flowchart LR
   CLOUD --- MON
 ```
 
-### v0.2 — Realism
+### v0.2 — Optional realism profiles
 
-Chaos library with undo · `promo` and `peak-day` load profiles · store‑impact table · on‑prem monitoring look‑alike (Prometheus/Grafana or Zabbix) as "where the alert starts" · ITSM stub · Layer‑4 hooks (§4).
+Separate hosts · 2 cloud VMs + LB · second region and VPN when required · additional bounded chaos with undo · `promo` and `peak-day` load profiles · optional Observability Agent comparison · prevention with sufficient history. Monitoring look-alikes, ITSM and specialised-agent hooks are separately justified extensions, not release prerequisites.
 
 ### v1.0 — Real hybrid
 
-Move `erp-*` and `pos-sim` to a **Proxmox homelab**; real site‑to‑site VPN; same Arc onboarding script; optional RabbitMQ on‑prem instead of Service Bus. Application code unchanged.
+Move `erp-*` and `pos-sim` to a **Proxmox homelab**; real site‑to‑site VPN; reuse application packages and telemetry contracts with a separate host/network lifecycle adapter. Keep Service Bus initially. RabbitMQ would require explicit broker integration and tests, not merely a configuration change.
 
 ### Backlog
 
-Update Manager patch wave · config‑drift detection via Change Tracking · cost view · multi‑agent hand‑off (Observability → SRE) once GA.
+Update Manager patch wave · config-drift detection via Change Tracking · cost view · investigate multi-agent handoff only when documented and useful; do not assume GA guarantees an integration.
 
 ## 7. Chaos catalogue
 
 | Button | Demo | Action | Undo | Expected signal | Expected agent behaviour |
 |---|---|---|---|---|---|
 | `latency` | 1 | `tc netem` +200 ms on `erp-core` | remove qdisc | checkout p95 ↑ all countries, no host down | traces latency to price‑lookup hop across VPN |
-| `backlog` | 1 | stop `erp-poster` after a logged config change | start service | `queue_depth` ↑, `unposted_eur` ↑ (2 countries first) | links to change, proposes restart, asks approval |
+| `backlog` | 1 | stop `erp-poster` after a logged reversible marker, without invalidating its startup config | start service and restore marker | queue depth and unposted EUR rise; load profile makes 2 countries dominate initially | links to change, proposes restart, asks approval |
 | `batch-hog` | 1 | `stress-ng` job named like a delta load on `erp-core` | kill job | slow lookups **and** backlog | correlates both to one cause |
-| `headroom` | 2 | `fallocate` disk / memory pressure | remove file | days‑to‑full trend | proactive brief flags it |
+| `headroom` | 2 | capped disposable-volume / bounded memory pressure, never fill root disk | remove test allocation | headroom signal; forecast only with adequate history | flags evidence or insufficient history |
 | `redundancy` | 2 | stop one `cap-api` VM | start VM | traffic survives | flags single‑node exposure before peak day |
 | `cert` | 2 | 7‑day TLS cert on `erp-core` | reissue | expiry warning | pre‑flight catches it |
 
-Every button is a script in `chaos/` with `--undo`.
+Every future button must have a script in `chaos/` with idempotent `--undo`, bounded duration, preconditions, and an independent cleanup path. The catalogue is not implemented.
 
 ## 8. Repository layout
 
-```
+The following is the intended implementation layout, not existing content:
+
+```text
 infra/        Bicep: network, vpn, compute, data, monitor, agents (per module)
 app/          cap-api/, erp-core/, erp-poster/, recon-job/  (FastAPI/Python, Dockerfiles)
 sim/          pos-sim load generator and profiles
 chaos/        failure buttons with --undo
+scripts/      lifecycle: preflight, up, doctor, scenario, reset, down
+profiles/     generic, non-secret deployment/scenario settings
 docs/
+  implementation-plan.md  staged delivery and lifecycle contract (exists)
   presentation-outline.md
   agent-context/  runbooks/, architecture.md, store-map.csv, allowed-actions.md, rbac.md
   layer-4-hooks.md
   runsheet.md
 ```
 
-**Naming & tags.** `rg-retailtx-cloud-<region>`, `rg-retailtx-onprem-<region>`; hosts `cap-api-01`, `erp-core-01`, `erp-poster-01`, `pos-sim-01`. Tags: `system=CAP|ERP`, `site=cloud|dc1`, `country=country-1..4`, `demo=retailtx`.
+**Naming & tags.** Environment-scoped cloud, simulated-datacenter and operations resource groups; include a generic environment ID and region to prevent collisions. Tags: `demo=retailtx`, `environmentId`, `profile`, `expiresAt`, `managedBy`, plus applicable `system=CAP|ERP` and `site=cloud|dc1`. Country belongs on business telemetry when infrastructure is shared.
 
-## 9. Build plan
+Use stable workload/component names and neutral environment IDs such as `demo01`.
+Do not include delivery stages, phases, or milestone numbers in new resource names,
+environment IDs, or reusable deployment artifact names. Stages belong in the
+delivery plan, not the naming convention. Preserve existing proof names and
+ownership manifests until an explicit replacement is planned; do not rename or
+recreate live resources just to apply this rule.
 
-| Week | Deliverable | Exit criterion |
+## 9. Staged build plan
+
+| Stage | Deliverable | Exit criterion |
 |---|---|---|
-| 1 | VNets + VPN, 2 cloud VMs, 3 "on‑prem" VMs on Arc, `cap-api` + `erp-core`, `pos-sim`, App Insights | one transaction visible POS → ledger with latency per hop |
-| 2 | queue + poster + recon metric, workbook, dynamic alerts, chaos buttons, agent context docs | each button gives a clear, repeatable signal |
-| 3 | SRE Agent onboarded with runbooks and allow‑list, Observability Agent, layer‑4 hooks as time allows, rehearsal, fallback recording | 15‑min run‑through without a terminal |
+| 0 | Prove SRE configuration, Arc bootstrap/identity and approved fixed action | supported path or explicit human-action fallback; spike resources removed |
+| 1 | Local transaction, queue, poster, recon, trace and backlog slice | correct unposted EUR; retry/recovery without loss or duplicate postings |
+| 2 | Repeatable Azure-lite foundation plus lifecycle automation | deploy twice safely; receive telemetry/alert; destroy and report residuals |
+| 3 | One SRE-led incident | evidence, visible approval, constrained action, recovery, RCA |
+| 4 | Customer-repeatable release | three fresh deploy/demo/reset/destroy cycles; measured no-terminal presentation |
+| 5 | Optional realism and real hybrid | each extension has its own customer outcome and lifecycle gate |
+
+Stage 0 and Stage 1 can proceed independently; Stage 2 depends on both.
+Use the detailed acceptance gates in `docs/implementation-plan.md`, not a fixed
+three-week promise. Do not implement the full vision in one change.
 
 ## 10. Demo‑day run sheet (short)
 
-1. Pre‑checks: VPN up, `pos-sim` on `promo` profile, all buttons undone, agent idle, recording ready as fallback.
+1. Run readiness checks for the selected profile: private connectivity (VPN only when selected), load profile, all faults undone, fresh telemetry, configured approvals, agent idle, recording available.
 2. Demo 1: `backlog` → wait for alert → follow the thread → approve → RCA. Keep `latency` ready if time allows.
 3. Walkthrough: open scope, one runbook, store map, allow‑list, audit log.
-4. Demo 2: open the scheduled brief; `headroom` pre‑fired an hour earlier.
-5. Reset all buttons.
+4. Optional Demo 2: open the scheduled brief; use only bounded headroom scenarios with adequate history or clearly labeled synthetic trends.
+5. Reset and verify healthy transaction state; after the session, destroy the environment or explicitly retain it with an expiry and owner.
 
-**If asked "is this really on‑prem?"** — "For the demo it runs in a separate network we manage exactly as on‑prem, through Azure Arc: same agent, same actions. The next step is doing this on one of your servers."
+**If asked "is this really on‑prem?"** — "This is an Azure-hosted hybrid simulation. Arc manages guest operations; Azure still owns the backing VM lifecycle. We demonstrate only the actions verified for this environment. A real on-premises deployment needs separate onboarding, connectivity, permissions, and action validation."
 
 ## 11. Open questions & risks
 
-- [ ] Observability Agent availability/preview status and hand‑off to SRE Agent — fallback: SRE Agent alone covers steps 2–8.
+- [ ] Optional Observability Agent experience and availability; no automatic handoff dependency.
 - [ ] SRE Agent action support on **Arc‑connected machines** — decides whether *Heal* is live or a proposed action.
-- [ ] SRE Agent preview enrolment / region for the subscription.
+- [x] SRE Agent availability, deployment, and read-only private telemetry query verified in the authorized subscription in Sweden Central; recheck for other targets.
+- [ ] Repeatable SRE data-plane configuration in CI; mandatory skipped steps must fail readiness.
+- [x] Arc bootstrap and Entra-authenticated private Monitor query verified after Azure IMDS blocking.
+- [ ] Arc application SDK identity for Service Bus and database access; the Monitor proof does not establish those paths.
+- [ ] Scope-external cleanup, soft deletion/retention, expired environments, and isolated agent memory.
 - [ ] Which on‑prem monitoring tool the customer actually uses (mimic it in v0.2).
 - [ ] Homelab public IP/DDNS and upload bandwidth (v1.0 only).
-- [ ] Cost guardrail: budget alert on both resource groups; VPN gateways and VMs are the main spend.
+- Budget alerts are not required for the authorized deployment. No budgets are created; explicit retention and teardown remain the lifecycle controls, with automated expiry still open.
 
 ## 12. Conventions
 
 - Keep the README short; details live in `docs/`.
 - No customer, people or account names anywhere in this repository.
 - Every chaos script has `--undo`; every agent action is on the allow‑list; every change to `docs/agent-context/` is reviewed.
+- Enforce action restrictions in code/policies and scoped identities; prose alone is not a security boundary.
+- Every deployment feature includes repeatable readiness, reset, and teardown behavior.
+- Distinguish proposed capability, documented product support, and verified behavior in this environment.
