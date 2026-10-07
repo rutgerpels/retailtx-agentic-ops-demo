@@ -7,8 +7,12 @@ and business impact measured as unposted sales value.
 **Status: private Stage 0 foundation deployed and verified.** Infrastructure and
 lifecycle commands support a disposable, Entra-only Arc/Monitor/SRE proof.
 See the [deployment guide](docs/deployment-stage0.md) for commands and limitations.
-The transaction application and approval-gated SRE healing are not implemented;
-the overall Stage 0 approved-action gate remains open.
+The **local transaction slice** is implemented with FastAPI, two PostgreSQL
+databases, the official Service Bus emulator, an outbox, idempotent posting,
+reconciliation, traces, and a reversible backlog fault. See the
+[local guide](docs/local-development.md) for reproducible commands and recovery
+verification. It does not deploy the application to Azure or establish
+approval-gated SRE healing; the Stage 0 approved-action gate remains open.
 
 ## Recommended direction
 
@@ -25,7 +29,7 @@ the overall Stage 0 approved-action gate remains open.
 
 See the [staged architecture and implementation plan](docs/implementation-plan.md)
 for the assessment, technology choices, lifecycle contract, delivery gates, and
-current Microsoft documentation. Later stages remain proposed; the Stage 0
+current Microsoft documentation. Stages 2 onward remain proposed; the Stage 0
 fixture is not the complete retail demo.
 
 All scenarios use synthetic data. Azure-hosted "on-premises" machines are an

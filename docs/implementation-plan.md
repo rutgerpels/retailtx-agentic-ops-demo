@@ -1,10 +1,12 @@
 # RetailTx: staged architecture and implementation plan
 
 **Status:** private Stage 0 foundation deployed and verified; approved-action gate
-still open. Later stages remain proposed.
+still open. Stage 1 local transaction slice implemented and locally verified; see the
+[local guide](local-development.md) for commands, evidence, and limitations.
+Stages 2 onward remain proposed.
 **Assessment date:** 2026-10-07.
-**Scope:** define a reusable demo product and begin the disposable infrastructure
-integration proof. The transaction application is not implemented.
+**Scope:** reusable demo product, private infrastructure integration proof, and
+local transaction correctness. No Azure application rollout is implemented.
 
 The [Stage 0 deployment guide](deployment-stage0.md) describes the implemented
 private networking, Entra identities, infrastructure automation, fixed operator
@@ -255,16 +257,17 @@ of Ready. Missing estimates or scoring inputs remain explicit assumptions with
 
 ### Open work after the private foundation proof
 
-As of 2026-10-07, [issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2)
-is the only open repository issue. Its implementation is awaiting human review in
-[PR #1](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/1); there are no
-other Ready items. The following remain planned work, not completed capabilities
-or separately filed tickets. The first two can proceed independently.
+As of 2026-10-07, the private foundation in
+[PR #1](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/1) is merged and
+[issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2) is closed.
+The local transaction slice is a separate implementation and review unit; it does
+not close the Stage 0 action gate. The following remain planned work, not completed
+capabilities or separately filed tickets.
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
 | Prove a constrained SRE-to-Arc action with approval, denial, wrong-target rejection, and audit evidence; otherwise explicitly accept the operator fallback | Required before claiming healing; current SRE access remains read-only |
-| Build the local checkout/ERP, outbox, posting worker, reconciliation, simulator, and reversible backlog incident | Prove monetary totals and retry/idempotency behavior before Azure application rollout |
+| Review the local checkout/ERP, outbox, poster, reconciliation, simulator, traces, and reversible backlog implementation | Local evidence is recorded in the local guide; it does not establish Azure identity, networking, or SRE healing |
 | Deploy the application slice with private managed data services, application SDK identity, traces, workbook, and static alerts | Depends on the local slice; the existing Monitor identity proof does not prove Service Bus/database authentication |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
 | Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Depends on the application, telemetry, and enforced approval boundary |

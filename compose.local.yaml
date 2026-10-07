@@ -1,0 +1,150 @@
+name: ${COMPOSE_PROJECT_NAME:-retailtx-demo01}
+
+x-environment: &environment
+  RETAILTX_MODE: local
+  CAP_DB_PASSWORD: ${CAP_DB_PASSWORD:?Run the local Init command}
+  ERP_DB_PASSWORD: ${ERP_DB_PASSWORD:?Run the local Init command}
+  CAP_DB_HOST: cap-db
+  ERP_DB_HOST: erp-db
+  CAP_URL: http://cap-api:8000
+  ERP_URL: http://erp-core:8000
+  BROKER_HOST: servicebus
+
+x-workload: &workload
+  build:
+    context: .
+    dockerfile: app/Dockerfile
+    target: runtime
+    args:
+      PIP_INDEX_URL: ${RETAILTX_PACKAGE_INDEX:-https://pypi.org/simple}
+  environment: *environment
+  init: true
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 20s
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+services:
+  cap-db:
+    image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+    environment:
+      POSTGRES_USER: retailtx
+      POSTGRES_DB: retailtx
+      POSTGRES_PASSWORD: ${CAP_DB_PASSWORD:?Run local Init}
+    volumes: [cap-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U retailtx -d retailtx"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  erp-db:
+    image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+    environment:
+      POSTGRES_USER: retailtx
+      POSTGRES_DB: retailtx
+      POSTGRES_PASSWORD: ${ERP_DB_PASSWORD:?Run local Init}
+    volumes: [erp-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U retailtx -d retailtx"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  emulator-sql:
+    image: mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA:?Explicit emulator and SQL license acceptance required}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Run local Init}
+      MSSQL_MEMORY_LIMIT_MB: "2048"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'SQLCMDPASSWORD="$$MSSQL_SA_PASSWORD" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -Q "SELECT 1" -b -o /dev/null'
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+  servicebus:
+    image: mcr.microsoft.com/azure-messaging/servicebus-emulator:2.0.1@sha256:5a96d893b245031740f7d46e0fe5ff282d24b78c4b7d761dd57590f3f010a9b3
+    environment:
+      ACCEPT_EULA: ${ACCEPT_EULA:?Explicit license acceptance required}
+      SQL_SERVER: emulator-sql
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Run local Init}
+      SQL_WAIT_INTERVAL: "5"
+    volumes:
+      - ./profiles/local/servicebus.json:/ServiceBus_Emulator/ConfigFiles/Config.json:ro
+    depends_on:
+      emulator-sql: {condition: service_healthy}
+  migrate:
+    <<: *workload
+    command: [python, -m, retailtx.runtime, migrate]
+    depends_on:
+      cap-db: {condition: service_healthy}
+      erp-db: {condition: service_healthy}
+  erp-core:
+    <<: *workload
+    command: [uvicorn, retailtx.erp_core:create_app, --factory, --host, "0.0.0.0", --port, "8000", --no-access-log]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  cap-api:
+    <<: *workload
+    command: [uvicorn, retailtx.cap_api:create_app, --factory, --host, "0.0.0.0", --port, "8000", --no-access-log]
+    ports: ["127.0.0.1:${CAP_PORT:-8000}:8000"]
+    networks: [default, frontend]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  outbox-publisher:
+    <<: *workload
+    command: [python, -m, retailtx.runtime, outbox-publisher]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      servicebus: {condition: service_started}
+  erp-poster:
+    <<: *workload
+    command: [python, -m, retailtx.runtime, erp-poster]
+    depends_on:
+      erp-core: {condition: service_healthy}
+      servicebus: {condition: service_started}
+  recon-job:
+    <<: *workload
+    command: [python, -m, retailtx.runtime, recon-job]
+    depends_on:
+      cap-api: {condition: service_healthy}
+      erp-core: {condition: service_healthy}
+  tools:
+    <<: *workload
+    profiles: [tools]
+  tests:
+    <<: *workload
+    profiles: [tests]
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+      target: tests
+      args:
+        PIP_INDEX_URL: ${RETAILTX_PACKAGE_INDEX:-https://pypi.org/simple}
+    environment:
+      <<: *environment
+      RETAILTX_INTEGRATION: "1"
+      RETAILTX_TEST_PROJECT: ${COMPOSE_PROJECT_NAME:-retailtx-demo01}
+
+networks:
+  default:
+    internal: true
+  frontend:
+volumes:
+  cap-data:
+  erp-data:

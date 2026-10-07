@@ -1,0 +1,13 @@
+*
+!pyproject.toml
+!requirements*.lock
+!app/
+!app/**
+!sim/
+!sim/**
+!chaos/
+!chaos/**
+!tests/
+!tests/local/
+!tests/local/**
+**/__pycache__/
