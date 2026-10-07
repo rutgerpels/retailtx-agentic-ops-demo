@@ -161,11 +161,17 @@ stdin. Regression coverage also addresses foreign-resource adoption, bounded CLI
 execution, uncertain-stop recovery and approval checks after confirmation.
 
 **Pause checkpoint:** two native recoveries are development evidence, not three
-consecutive clean rehearsals. The explicit post-action verification request was
-accepted, but the complete corrected repeat loop and resulting incident notes
-still need acceptance. The work remains on draft PR #5; no customer-ready claim
-or human approval is implied. Resume from the saved ownership manifests and raw
-thread/audit evidence in `.azure`, then rerun the corrected live test.
+consecutive clean rehearsals. The explicit post-action verification subsequently
+produced an incident note: independently running VM, connected Arc host and a
+fresh private heartbeat at 21:46:26 UTC. Activity Log also confirmed the configured
+SRE identity executed the second start. The complete corrected repeat loop still
+needs acceptance. The work remains on draft PR #5; no customer-ready claim or
+human approval is implied. For this pause, the temporary start role was removed
+and Azure accepted deletion of the disposable group (`Deleting`). No local fault
+guard remains active. Final deletion convergence and repeat Down must be checked
+on resume before redeploying; this is not yet a zero-residual claim. The original
+foundation remains retained/billable. Raw thread and audit evidence remain in
+`.azure`.
 
 The subscription's existing Guest Configuration policy attempted an extension
 on this deliberately extension-disabled fixture and received HTTP 409. No policy
