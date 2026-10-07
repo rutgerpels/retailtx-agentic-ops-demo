@@ -12,6 +12,69 @@ function Assert-RetailEnvironmentName {
     }
 }
 
+function Invoke-RetailAzure {
+    <#
+    .SYNOPSIS
+    Run Azure CLI with explicit subscription and native argument-array handling.
+    .DESCRIPTION
+    On Windows bypass the cmd launcher so REST query characters remain data.
+    Return parsed JSON; propagate CLI failures without printing argument secrets.
+    .PARAMETER SubscriptionId
+    The explicit authorized subscription.
+    .PARAMETER Arguments
+    Individual CLI arguments, not a shell command.
+    .PARAMETER TimeoutSeconds
+    Optional process deadline. Zero preserves the caller's existing unbounded behavior.
+    .EXAMPLE
+    Invoke-RetailAzure -SubscriptionId <guid> -Arguments @('account', 'show')
+    .OUTPUTS
+    Parsed JSON objects.
+    #>
+    param(
+        [Parameter(Mandatory)][guid]$SubscriptionId,
+        [Parameter(Mandatory)][string[]]$Arguments,
+        [ValidateRange(0, 3600)][int]$TimeoutSeconds = 0
+    )
+    $executable = (Get-Command az -ErrorAction Stop).Source
+    $prefix = @()
+    if ($IsWindows -and [IO.Path]::GetExtension($executable) -eq '.cmd') {
+        $executable = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $executable) '..\python.exe'))
+        if (-not (Test-Path -LiteralPath $executable)) { throw 'Azure CLI Python launcher is unavailable.' }
+        $prefix = @('-IBm', 'azure.cli')
+    }
+    $operation = $Arguments[0..([Math]::Min(1, $Arguments.Count - 1))] -join ' '
+    if ($TimeoutSeconds -gt 0) {
+        $startInfo = [Diagnostics.ProcessStartInfo]::new($executable)
+        $startInfo.UseShellExecute = $false
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        foreach ($argument in @($prefix) + @($Arguments) +
+            @('--subscription', $SubscriptionId.ToString(), '--only-show-errors', '--output', 'json')) {
+            $startInfo.ArgumentList.Add($argument)
+        }
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        try {
+            $null = $process.Start()
+            $process.StandardInput.Close()
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+                Stop-Process -Id $process.Id -Force -ErrorAction Stop
+                throw [TimeoutException]::new("Azure CLI timed out after $TimeoutSeconds seconds: $operation. An Azure operation may still be in progress.")
+            }
+            $result = $stdout.GetAwaiter().GetResult()
+            $null = $stderr.GetAwaiter().GetResult()
+            if ($process.ExitCode -ne 0) { throw "Azure CLI failed: $operation. Inspect Azure operation status; arguments and error payload were withheld." }
+        } finally { $process.Dispose() }
+    } else {
+        $result = & $executable @prefix @Arguments --subscription $SubscriptionId.ToString() --only-show-errors --output json
+        if ($LASTEXITCODE -ne 0) { throw "Azure CLI failed: $operation." }
+    }
+    if ($result) { return (($result -join "`n") | ConvertFrom-Json -AsHashtable) }
+}
+
 function Assert-RetailManifest {
     <#
     .SYNOPSIS
@@ -116,4 +179,4 @@ function Test-RetailApplicationInstall {
 
 Export-ModuleMember -Function Assert-RetailEnvironmentName, Assert-RetailManifest,
     Assert-RetailOwnedGroup, Save-RetailState, ConvertTo-RetailGuestPayload,
-    ConvertFrom-RetailDeploymentOutputs, Test-RetailApplicationInstall
+    ConvertFrom-RetailDeploymentOutputs, Test-RetailApplicationInstall, Invoke-RetailAzure

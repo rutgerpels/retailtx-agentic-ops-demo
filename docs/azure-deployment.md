@@ -288,12 +288,21 @@ complex deployment. The next proof should therefore:
    presentation target, without hidden terminal repairs, before customer use.
    Fresh deployment/teardown repeatability remains a separate release gate.
 
-Microsoft documents a built-in Azure CLI mitigation tool and approval for Azure
-write operations in Review mode. That is a **documented candidate**, not a
-verified action in this environment. The exact fault and recovery target still
-need a small integration proof; moving the poster or introducing new compute
-services is not assumed necessary. The current stopped-on-prem-poster scenario
-remains available for correctness testing and an explicitly human-run fallback.
+The subsequent [native-action proof](native-action-proof.md) verified the
+built-in Azure CLI path: a pending VM-start card, cancellation without execution,
+approved execution by the configured SRE managed identity, and independently
+observed recovery. SRE also read the retained Arc host's fresh heartbeat through
+private Monitor. The extra permissions are start-only at one disposable VM.
+
+This changes the recommendation from an unverified native-action candidate to a
+working integration path. It does **not** close this application's trace/guest
+control gates: the fixture has no retail application or causal dependency on
+the Arc host. Decisions were automated authorization, not human rehearsals, and
+native Review does not establish approval enforcement across terminal tools.
+Use the smaller path to build one genuine hybrid service incident and a product
+UI rehearsal; do not resume the larger application deployment merely because a
+VM start worked. The stopped-on-prem-poster scenario remains useful correctness
+evidence and an explicitly human-run fallback.
 
 ## Primary references
 

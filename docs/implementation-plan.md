@@ -1,7 +1,9 @@
 # RetailTx: staged architecture and implementation plan
 
-**Status:** private Stage 0 foundation deployed and verified; approved-action gate
-still open. Stage 1 local transaction slice implemented and locally verified; see the
+**Status:** private Stage 0 foundation deployed and verified; a constrained
+[native SRE VM-start proof](native-action-proof.md) now verifies native approval,
+denial, managed-identity execution and private Arc evidence. Human rehearsal and
+the complete approved-incident gate remain open. Stage 1 local transaction slice implemented and locally verified; see the
 [local guide](local-development.md) for commands, evidence, and limitations.
 Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
@@ -9,13 +11,16 @@ recorded in the [Azure application guide](azure-deployment.md).
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-07.
 **Scope:** reusable demo product, private infrastructure integration proof, and
-local transaction correctness, and the private Azure application lifecycle.
+local transaction correctness, the private Azure application lifecycle, and a
+small native-action integration proof.
 Operator-driven recovery does not establish approved SRE healing.
 
 The [Stage 0 deployment guide](deployment-stage0.md) describes the implemented
 private networking, Entra identities, infrastructure automation, fixed operator
-verification, and owned teardown. Its read-only SRE configuration does not satisfy
-the approved-action exit gate below. No budgets or scheduled expiry are configured.
+verification, and owned teardown. Its baseline SRE configuration is read-only;
+the separate native-action fixture adds only an exact VM-start grant, without
+changing that agent's Review configuration. No budgets or scheduled expiry are
+configured.
 
 ## 1. Assessment and recommendation
 
@@ -228,8 +233,10 @@ command delivery failed repeatedly, including after one backing VM restart;
 adding more command transports or retries is not the default response. The
 backlog scenario remains useful correctness evidence, not the required first
 live SRE scenario. This smaller integration proof does not waive the lifecycle,
-approval, or customer-release gates below. No alternate scenario is implemented
-or verified yet.
+approval, or customer-release gates below. The subsequent native-action fixture
+has now verified the native path with automated decisions and private Arc
+evidence. It has no retail application or hybrid service dependency and therefore
+does not satisfy Stage 3 business recovery or a human/no-terminal rehearsal.
 
 | Stage | Scope | Exit gate |
 | --- | --- | --- |
@@ -278,14 +285,15 @@ The local transaction slice was reviewed and merged in
 [PR #4](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/4). The private
 Azure application profile extends it with real managed services and operator
 lifecycle automation; its live acceptance record is maintained separately.
-Neither closes the Stage 0 action gate. Remaining work:
+The separate native-action fixture proves a narrower action path, not the
+complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Prove the smallest constrained SRE-led hybrid flow with an Azure-side action, approval, denial, wrong-target rejection, and audit evidence | Highest-priority integration proof; current SRE access remains read-only. Arc guest remediation is deferred rather than assumed reliable |
+| Connect the proven native Azure action to one genuine hybrid service dependency, then rehearse human approval and recovery in the product UI | Native VM start, denial and action-identity audit are verified with automated decisions; exact-target harness rejection and scoped RBAC are checked. No alert response plan or business recovery is claimed; universal terminal-tool approval remains unproven |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
-| Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Depends on the application, telemetry, and enforced approval boundary |
+| Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Use a minimal service scenario around the native action; do not make the deferred full application topology a prerequisite |
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
 | Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
 

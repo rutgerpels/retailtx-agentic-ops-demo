@@ -45,21 +45,9 @@ foreach ($role in @('cloud', 'dc', 'ops')) { $groups[$role] = "rg-retailtx-$role
 $script:state = $null
 $arcApi = '2026-07-15'
 $computeApi = '2024-11-01'
-$azCommand = Get-Command az -ErrorAction Stop
-$azExecutable = $azCommand.Source
-$azPrefix = @()
-if ($IsWindows -and [IO.Path]::GetExtension($azExecutable) -eq '.cmd') {
-    # Avoid cmd.exe interpreting REST query ampersands and JMESPath parentheses.
-    $azExecutable = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $azExecutable) '..\python.exe'))
-    if (-not (Test-Path -LiteralPath $azExecutable)) { throw 'The Windows Azure CLI Python launcher could not be resolved.' }
-    $azPrefix = @('-IBm', 'azure.cli')
-}
-
 function Invoke-Azure {
     param([Parameter(Mandatory)][string[]]$Arguments)
-    $result = & $azExecutable @azPrefix @Arguments --subscription $subscription --only-show-errors --output json
-    if ($LASTEXITCODE -ne 0) { throw "Azure CLI failed: $($Arguments[0..([Math]::Min(1, $Arguments.Count - 1))] -join ' ')." }
-    if ($result) { return (($result -join "`n") | ConvertFrom-Json -AsHashtable) }
+    Invoke-RetailAzure -SubscriptionId $subscription -Arguments $Arguments
 }
 
 function Save-State { Save-RetailState -State $script:state -Path $statePath }

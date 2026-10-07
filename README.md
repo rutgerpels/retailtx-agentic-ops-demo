@@ -19,14 +19,19 @@ static alerts, and an owned deploy/verify/reset/destroy lifecycle. **It is not
 customer-demo-ready:** live acceptance is blocked by intermittent Arc command
 delivery, and the final trace fixes have not been verified in Azure. See the
 [Azure application guide](docs/azure-deployment.md) for live acceptance status
-and commands. Operator recovery is not approval-gated SRE healing; that gate
-remains open.
+and commands. Its operator recovery is not approval-gated SRE healing.
+
+A smaller [native-action proof](docs/native-action-proof.md) has verified an
+SRE native VM-start approval and execution, denial without execution, and
+private Arc heartbeat evidence. It uses a start-only role on one isolated VM.
+The decisions were automated integration tests, not human rehearsals. This is
+hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
 ## Recommended direction
 
-- Prove one small SRE-led hybrid incident with Azure-side remediation before
-  expanding the topology or deployment automation. Keep Arc guest commands off
-  the live-demo critical path until separately proven reliable.
+- Build the first customer flow around the proven native Azure action, adding
+  one genuine hybrid service dependency and recovery check before expanding
+  topology. Keep Arc guest commands off the live-demo critical path.
 - Use Azure Monitor for evidence and Azure SRE Agent for investigation and
   approval-gated recovery.
 - Make Azure Copilot Observability Agent an optional Azure Monitor investigation
