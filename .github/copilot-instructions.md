@@ -2,7 +2,7 @@
 
 > A demo environment that mimics a business‑critical retail transaction chain split across **on‑premises** and **Azure**, used to show how an *agentic operating model* (Azure Arc, Azure Monitor, Observability Agent, Azure SRE Agent and specialised agents) helps a small operations team run a hybrid landscape — without migrating first.
 
-- **Status:** private Stage 0 foundation deployed and verified; local Stage 1 application slice implemented (see `docs/local-development.md`); Azure application rollout and approved SRE healing not implemented
+- **Status:** private Stage 0 foundation and local Stage 1 slice verified; Stage 2 private Azure application lifecycle implemented but live acceptance blocked by Arc command delivery (see `docs/azure-deployment.md`); approved SRE healing not implemented
 - **Stack:** Bicep · Python/FastAPI · PostgreSQL · Azure Service Bus · Azure Monitor · Azure Arc · Azure SRE Agent
 - **Not SAP:** the app is *SAP‑like*. Component names are generic on purpose.
 
@@ -71,7 +71,7 @@ handoff unless a separately verified integration demonstrates a distinct outcome
 7. Engineer approves.
 8. SRE Agent executes the supported approved action, confirms recovery, writes the RCA and stores the knowledge. Until the SRE-to-Arc path is proven, show diagnosis and a human-run action explicitly instead.
 
-**Triggers:** `chaos/backlog.py` implements a bounded local consumption pause with undo. Real container stop/start is covered by local acceptance tests. Azure backlog injection, `chaos/latency`, and `chaos/batch-hog` remain planned (see §7).
+**Triggers:** `chaos/backlog.py` implements a bounded consumption pause with undo in local and Azure modes. Local acceptance stops the real container; Azure `Verify` stops the real service with an independent recovery timer. See the respective deployment guides for verified evidence. `chaos/latency` and `chaos/batch-hog` remain planned (see §7).
 **Target success criteria:** end‑to‑end in ≤ 12 min without a terminal after rehearsal; impact expressed per country; approval step visible; RCA produced. Deployment readiness and telemetry warm-up are measured separately.
 **Aside (60 s):** natural‑language questions to the estate ("which interfaces failed this week?").
 
@@ -200,7 +200,7 @@ Update Manager patch wave · config-drift detection via Change Tracking · cost 
 | `redundancy` | 2 | stop one `cap-api` VM | start VM | traffic survives | flags single‑node exposure before peak day |
 | `cert` | 2 | 7‑day TLS cert on `erp-core` | reissue | expiry warning | pre‑flight catches it |
 
-Every future button must have a script in `chaos/` with idempotent `--undo`, bounded duration, preconditions, and an independent cleanup path. Only the local backlog pause is implemented; the host-level catalogue remains proposed.
+Every future button must have a script in `chaos/` with idempotent `--undo`, bounded duration, preconditions, and an independent cleanup path. The backlog pause and operator-driven Azure stopped-worker verification are implemented; the remaining catalogue is proposed.
 
 ## 8. Repository layout
 
@@ -264,7 +264,8 @@ three-week promise. Do not implement the full vision in one change.
 - [x] SRE Agent availability, deployment, and read-only private telemetry query verified in the authorized subscription in Sweden Central; recheck for other targets.
 - [ ] Repeatable SRE data-plane configuration in CI; mandatory skipped steps must fail readiness.
 - [x] Arc bootstrap and Entra-authenticated private Monitor query verified after Azure IMDS blocking.
-- [ ] Arc application SDK identity for Service Bus and database access; the Monitor proof does not establish those paths.
+- [x] Application-profile cloud managed identity to PostgreSQL and Arc identity to Service Bus/Monitor verified; the ERP database uses local peer authentication, not Arc-to-PostgreSQL authentication.
+- [ ] Reliable Arc guest-command delivery; repeated timeouts persisted after one backing VM restart. Prioritize a small hybrid SRE flow with Azure-side remediation, not additional guest-command transports.
 - [ ] Scope-external cleanup, soft deletion/retention, expired environments, and isolated agent memory.
 - [ ] Which on‑prem monitoring tool the customer actually uses (mimic it in v0.2).
 - [ ] Homelab public IP/DDNS and upload bandwidth (v1.0 only).

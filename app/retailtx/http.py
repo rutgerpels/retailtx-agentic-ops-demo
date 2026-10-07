@@ -1,15 +1,43 @@
+import ssl
 from collections.abc import Awaitable, Callable
 from time import perf_counter
 
 import httpx
 import psycopg
+from azure.core.exceptions import AzureError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from retailtx.contracts import Conflict, EvidenceUnavailable
+from retailtx.settings import Settings, https_url
 from retailtx.telemetry import SpanKind, event, propagator, tracer
+
+
+def client(settings: Settings, base_url: str = "", *, timeout: float = 3) -> httpx.Client:
+    verify: ssl.SSLContext | bool = True
+    if settings.mode == "azure":
+        if base_url:
+            https_url(base_url)
+        verify = ssl.create_default_context(cafile=settings.tls_ca_file)
+        verify.minimum_version = ssl.TLSVersion.TLSv1_2
+        verify.load_cert_chain(settings.tls_cert_file, settings.tls_key_file)
+
+    def validate_request(request: httpx.Request) -> None:
+        if settings.mode == "azure":
+            origin = str(request.url.copy_with(path="", query=None, fragment=None)).rstrip("/")
+            if request.url.scheme != "https" or origin not in {settings.cap_url, settings.erp_url}:
+                raise ValueError("Azure HTTP clients may only call the configured HTTPS peers")
+
+    return httpx.Client(
+        base_url=base_url,
+        timeout=timeout,
+        verify=verify,
+        trust_env=False,
+        follow_redirects=False,
+        event_hooks={"request": [validate_request]},
+    )
 
 
 class BodyLimit:
@@ -89,6 +117,7 @@ def setup(app: FastAPI) -> None:
         )
 
     app.add_exception_handler(psycopg.Error, dependency_handler)
+    app.add_exception_handler(AzureError, dependency_handler)
     app.add_exception_handler(httpx.HTTPError, dependency_handler)
     app.add_exception_handler(EvidenceUnavailable, dependency_handler)
 

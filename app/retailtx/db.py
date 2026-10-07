@@ -1,16 +1,35 @@
 import hashlib
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 import psycopg
+from azure.core.credentials import TokenCredential
 from psycopg.rows import dict_row
 
+POSTGRES_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
 
-def connect(dsn: str) -> psycopg.Connection[dict[str, Any]]:
+
+@dataclass(frozen=True)
+class EntraPostgres:
+    conninfo: str
+    credential: TokenCredential = field(repr=False)
+
+
+DatabaseTarget: TypeAlias = str | EntraPostgres
+
+
+def connect(dsn: DatabaseTarget) -> psycopg.Connection[dict[str, Any]]:
+    if isinstance(dsn, EntraPostgres):
+        return psycopg.connect(
+            dsn.conninfo,
+            password=dsn.credential.get_token(POSTGRES_SCOPE).token,
+            row_factory=dict_row,
+        )
     return psycopg.connect(dsn, row_factory=dict_row)
 
 
-def migrate(dsn: str, component: str) -> None:
+def migrate(dsn: DatabaseTarget, component: str) -> None:
     if component not in {"cap", "erp"}:
         raise ValueError("Unknown database component")
     with connect(dsn) as conn:

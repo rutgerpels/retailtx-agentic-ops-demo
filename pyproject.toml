@@ -5,13 +5,15 @@ build-backend = "hatchling.build"
 [project]
 name = "retailtx"
 version = "0.1.0"
-description = "Synthetic local retail transaction and recovery slice"
+description = "Synthetic local and private Azure retail transaction and recovery slice"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+  "azure-identity==1.26.0",
+  "azure-monitor-opentelemetry-exporter==1.0.0b57",
   "azure-servicebus==7.14.3",
   "fastapi==0.142.2",
   "httpx==0.28.1",
-  "opentelemetry-sdk==1.45.0",
+  "opentelemetry-sdk==1.44.0",
   "psycopg[binary]==3.3.6",
   "uvicorn==0.54.0",
 ]
@@ -29,7 +31,7 @@ dev = [
 packages = ["app/retailtx"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/local"]
+testpaths = ["tests/local", "tests/azure"]
 addopts = "-ra"
 pythonpath = ["."]
 markers = ["integration: requires the isolated local Compose stack"]

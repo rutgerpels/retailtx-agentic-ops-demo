@@ -3,10 +3,14 @@
 **Status:** private Stage 0 foundation deployed and verified; approved-action gate
 still open. Stage 1 local transaction slice implemented and locally verified; see the
 [local guide](local-development.md) for commands, evidence, and limitations.
-Stages 2 onward remain proposed.
+Stage 2 private Azure application profile implemented, but live acceptance is
+blocked by Arc command delivery. Evidence and the reliability assessment are
+recorded in the [Azure application guide](azure-deployment.md).
+Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-07.
 **Scope:** reusable demo product, private infrastructure integration proof, and
-local transaction correctness. No Azure application rollout is implemented.
+local transaction correctness, and the private Azure application lifecycle.
+Operator-driven recovery does not establish approved SRE healing.
 
 The [Stage 0 deployment guide](deployment-stage0.md) describes the implemented
 private networking, Entra identities, infrastructure automation, fixed operator
@@ -217,12 +221,22 @@ and Stage 1 can proceed independently. Stage 2 depends on both; Stage 3 depends 
 Stage 2; Stage 4 depends on Stage 3. Stage 5 contains optional, separately scoped
 extensions, not a requirement for the first customer demonstration.
 
+**Reliability reassessment, 2026-10-07:** pause expansion of the Azure application
+profile. First return to the Stage 0 action gate and prove a small SRE-led flow
+with hybrid evidence and a narrowly authorized Azure-side remediation. Arc guest
+command delivery failed repeatedly, including after one backing VM restart;
+adding more command transports or retries is not the default response. The
+backlog scenario remains useful correctness evidence, not the required first
+live SRE scenario. This smaller integration proof does not waive the lifecycle,
+approval, or customer-release gates below. No alternate scenario is implemented
+or verified yet.
+
 | Stage | Scope | Exit gate |
 | --- | --- | --- |
 | **0. Prove the risky integrations** | Small disposable proof of agent availability, IaC/data-plane configuration, Arc onboarding, identity, and one approved action | Given the intended subscription and region, agent configuration can be reapplied; an approved fixed-action path works, or the manual fallback is explicitly accepted. All spike resources are removed |
 | **1. Local transaction slice** | API, ERP, two databases, outbox, queue, poster, reconciliation, synthetic load, traces, and backlog fault | Given a known dataset, when the poster stops and resumes, expected unposted EUR rises and returns to baseline with no lost or duplicate ledger entries |
 | **2. Repeatable Azure foundation** | Two-VM topology, Arc evaluation host, real managed data services, telemetry, workbook, static alert; deploy and destroy automation together | Given a fresh environment, when deployed twice, no duplicate infrastructure/configuration appears; backlog produces the expected signal; after destruction no unexplained owned resources remain |
-| **3. One SRE-led incident** | One knowledge pack, alert response plan, evidence-based diagnosis, enforced action boundary, visible approval, recovery verification, RCA | Given the backlog incident, no write occurs before approval; denial causes no write; an approved recovery drains the backlog; audit and RCA identify the action, target, and outcome |
+| **3. One SRE-led incident** | One knowledge pack, alert response plan, evidence-based diagnosis, enforced action boundary, visible approval, recovery verification, RCA | Given the selected hybrid incident, no write occurs before approval; denial causes no write; approved recovery restores the business baseline; audit and RCA identify the action, target, and outcome |
 | **4. Customer-repeatable release** | Generic profiles, CI lifecycle, readiness checks, no-terminal scenario trigger, reset, TTL cleanup, fallback recording | Given a new environment ID, deploy -> check -> demonstrate -> reset -> destroy succeeds three times from the same release; the presentation path targets <=12 minutes and lifecycle durations are recorded |
 | **5. Targeted realism** | Add latency, then separated-host batch pressure/redundancy; optional VPN, second region, prevention, Observability Agent comparison, and real hybrid | Each extension has a distinct customer outcome, isolated feature/profile selection, fault/recovery evidence, and its own lifecycle gate |
 
@@ -236,12 +250,12 @@ Stage 0 must specifically establish:
 - Azure cloud managed identity versus Arc identity behavior for Service Bus and
   application dependencies. Prove SDK token acquisition after Azure IMDS is blocked;
   do not silently substitute a shared broker connection string.
-- The precise SRE -> approved action -> Arc execution path. Arc Run Command exists,
-  but that alone does not prove SRE integration, approval semantics, or a safe
-  command allow-list. [S9] Prefer a verified native path. If broad script execution
-  cannot be constrained, retain read-only diagnosis plus a human-run fixed action;
-  consider a small authenticated fixed-action adapter only as a separately scoped
-  implementation decision.
+- The precise SRE -> approved action -> selected execution target path. Prioritize
+  a verified native Azure action for the first hybrid incident. Arc Run Command
+  exists, but that alone does not prove reliable delivery, SRE integration,
+  approval semantics, or a safe command allow-list. [S9] If broad script execution
+  cannot be constrained, retain read-only diagnosis plus a human-run fixed action.
+  A custom adapter is a separate decision, not an automatic workaround.
 - SRE ARM deployment **and** data-plane configuration. Official tooling documents
   a second phase for knowledge uploads, hooks, and other extras; skipped mandatory
   extras must fail readiness, not count as successful deployment. [S5]
@@ -260,15 +274,16 @@ of Ready. Missing estimates or scoring inputs remain explicit assumptions with
 As of 2026-10-07, the private foundation in
 [PR #1](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/1) is merged and
 [issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2) is closed.
-The local transaction slice is a separate implementation and review unit; it does
-not close the Stage 0 action gate. The following remain planned work, not completed
-capabilities or separately filed tickets.
+The local transaction slice was reviewed and merged in
+[PR #4](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/4). The private
+Azure application profile extends it with real managed services and operator
+lifecycle automation; its live acceptance record is maintained separately.
+Neither closes the Stage 0 action gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Prove a constrained SRE-to-Arc action with approval, denial, wrong-target rejection, and audit evidence; otherwise explicitly accept the operator fallback | Required before claiming healing; current SRE access remains read-only |
-| Review the local checkout/ERP, outbox, poster, reconciliation, simulator, traces, and reversible backlog implementation | Local evidence is recorded in the local guide; it does not establish Azure identity, networking, or SRE healing |
-| Deploy the application slice with private managed data services, application SDK identity, traces, workbook, and static alerts | Depends on the local slice; the existing Monitor identity proof does not prove Service Bus/database authentication |
+| Prove the smallest constrained SRE-led hybrid flow with an Azure-side action, approval, denial, wrong-target rejection, and audit evidence | Highest-priority integration proof; current SRE access remains read-only. Arc guest remediation is deferred rather than assumed reliable |
+| Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
 | Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Depends on the application, telemetry, and enforced approval boundary |
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
@@ -301,10 +316,12 @@ Tag resources with `demo=retailtx`, `environmentId`, `profile`, `expiresAt`,
 
 ### Proposed operator contract
 
-The following is the **full future application contract**. The narrower foundation
-operations `Preflight`, `Up`, `Status`, `Verify`, and `Down` already exist in
-`scripts/Invoke-Stage0.ps1`; application readiness, `scenario`/`reset`, and CI/expiry
-automation do not.
+The following is the **full target application contract**. The narrower foundation
+commands remain in `scripts/Invoke-Stage0.ps1`. The independent
+`scripts/Invoke-Azure.ps1` now implements `Preflight`, `Up`, `Status`, `Doctor`,
+`Verify`, `Scenario`, `Reset`, and `Down` for the private application profile.
+Agent configuration, CI/expiry automation, and a no-terminal presentation surface
+remain outside that implementation.
 
 | Operation | Required behavior |
 | --- | --- |

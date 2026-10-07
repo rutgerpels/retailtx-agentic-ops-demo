@@ -4,7 +4,7 @@ from azure.servicebus import ServiceBusMessage
 from azure.servicebus.exceptions import ServiceBusError
 
 from retailtx.contracts import Posting
-from retailtx.db import connect
+from retailtx.db import DatabaseTarget, connect
 from retailtx.telemetry import SpanKind, carrier, event, propagator, tracer
 
 MAX_ATTEMPTS = 8
@@ -14,7 +14,7 @@ class Sender(Protocol):
     def send_messages(self, message: ServiceBusMessage, *, timeout: float) -> None: ...
 
 
-def publish_one(dsn: str, sender: Sender) -> bool:
+def publish_one(dsn: DatabaseTarget, sender: Sender) -> bool:
     # Holding the row lock across a bounded send makes process death release the claim.
     # A send/commit ambiguity is intentionally resolved by redelivery, never data deletion.
     with connect(dsn) as conn:

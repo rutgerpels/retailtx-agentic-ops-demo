@@ -6,16 +6,46 @@ from types import FrameType
 
 import httpx
 import psycopg
+from azure.core.exceptions import AzureError
 from azure.servicebus import ServiceBusSubQueue
-from azure.servicebus.exceptions import ServiceBusError
 
 from retailtx import broker, fault
 from retailtx.db import connect, migrate
+from retailtx.http import client
 from retailtx.poster import handle_message
 from retailtx.publisher import publish_one
 from retailtx.reconciliation import INTERVAL_SECONDS, reconcile, replay_unposted, status
 from retailtx.settings import Settings
-from retailtx.telemetry import configure, event
+from retailtx.telemetry import carrier, configure, event
+
+
+def validate_command(command: str, settings: Settings) -> None:
+    if settings.mode == "azure" and command in {"doctor", "drain"}:
+        action = "Doctor" if command == "doctor" else "Reset"
+        raise ValueError(
+            f"Azure {command} requires Invoke-Azure.ps1 {action} for full distributed evidence, "
+            "including operator-authorized DLQ checks; runtime identities have host-scoped roles"
+        )
+    if settings.mode == "azure" and command == "dead-letters" and settings.identity_kind != "arc":
+        raise ValueError(
+            "Azure cloud identity is send-only; use Invoke-Azure.ps1 Doctor for the "
+            "operator-authorized DLQ count, or run dead-letters on the receiving DC host"
+        )
+    if command == "migrate" and settings.mode == "azure":
+        raise ValueError("Azure migrations require the separate migrate-cap or migrate-erp command")
+    if command in {
+        "migrate",
+        "migrate-cap",
+        "outbox-publisher",
+        "recon-job",
+        "reconcile",
+        "replay-unposted",
+        "doctor",
+        "drain",
+    }:
+        _ = settings.cap_dsn
+    if command in {"migrate", "migrate-erp", "erp-poster", "undo"}:
+        _ = settings.erp_dsn
 
 
 def loop(component: str, settings: Settings) -> None:
@@ -30,7 +60,7 @@ def loop(component: str, settings: Settings) -> None:
     while not stop.is_set():
         try:
             if component == "recon-job":
-                with httpx.Client(base_url=settings.erp_url, timeout=3) as http:
+                with client(settings, settings.erp_url) as http:
                     reconcile(settings.cap_dsn, http)
                 stop.wait(INTERVAL_SECONDS)
             elif component == "outbox-publisher":
@@ -44,7 +74,7 @@ def loop(component: str, settings: Settings) -> None:
                     bus.get_queue_receiver(
                         broker.QUEUE, max_wait_time=2, prefetch_count=0
                     ) as receiver,
-                    httpx.Client(base_url=settings.erp_url, timeout=3) as http,
+                    client(settings, settings.erp_url) as http,
                 ):
                     while not stop.is_set():
                         if fault.heartbeat(settings.erp_dsn):
@@ -60,7 +90,7 @@ def loop(component: str, settings: Settings) -> None:
             else:
                 raise ValueError("Unknown worker")
             failures = 0
-        except (ServiceBusError, psycopg.OperationalError, httpx.HTTPError) as exc:
+        except (AzureError, psycopg.OperationalError, httpx.HTTPError) as exc:
             failures += 1
             delay = min(30, 2 ** min(failures, 5))
             event(
@@ -70,9 +100,11 @@ def loop(component: str, settings: Settings) -> None:
 
 
 def doctor(settings: Settings) -> bool:
-    with httpx.Client(timeout=3) as http:
-        http.get(f"{settings.cap_url}/health").raise_for_status()
-        http.get(f"{settings.erp_url}/health").raise_for_status()
+    validate_command("doctor", settings)
+    with client(settings, settings.cap_url) as http:
+        http.get("/health", headers=carrier()).raise_for_status()
+    with client(settings, settings.erp_url) as http:
+        http.get("/health", headers=carrier()).raise_for_status()
     worker = fault.worker_status(settings.erp_dsn)
     with connect(settings.cap_dsn) as conn:
         blocked = conn.execute(
@@ -85,8 +117,8 @@ def doctor(settings: Settings) -> bool:
         dead_letters = receiver.peek_messages(max_message_count=1, timeout=5)
     result = status(settings.cap_dsn)
     healthy = bool(
-        worker["alive"]
-        and not worker["paused"]
+        worker.get("alive") is True
+        and worker.get("paused") is False
         and worker["worker_state"] == "running"
         and blocked is not None
         and blocked["count"] == 0
@@ -105,8 +137,9 @@ def doctor(settings: Settings) -> bool:
 
 
 def drain(settings: Settings) -> None:
+    validate_command("drain", settings)
     deadline = monotonic() + 120
-    with httpx.Client(base_url=settings.erp_url, timeout=3) as http:
+    with client(settings, settings.erp_url) as http:
         while monotonic() < deadline:
             result = reconcile(settings.cap_dsn, http)
             current = result["current"]
@@ -130,6 +163,8 @@ def main() -> None:
         "command",
         choices=[
             "migrate",
+            "migrate-cap",
+            "migrate-erp",
             "outbox-publisher",
             "erp-poster",
             "recon-job",
@@ -143,11 +178,16 @@ def main() -> None:
     )
     args = parser.parse_args()
     settings = Settings.from_env()
-    configure(args.command)
+    validate_command(args.command, settings)
+    configure(args.command, settings)
     if args.command == "migrate":
         migrate(settings.cap_dsn, "cap")
         migrate(settings.erp_dsn, "erp")
         event("migration.complete")
+    elif args.command in {"migrate-cap", "migrate-erp"}:
+        component = args.command.removeprefix("migrate-")
+        migrate(settings.cap_dsn if component == "cap" else settings.erp_dsn, component)
+        event("migration.complete", component=component)
     elif args.command == "doctor":
         raise SystemExit(0 if doctor(settings) else 1)
     elif args.command == "undo":
@@ -155,7 +195,7 @@ def main() -> None:
     elif args.command == "drain":
         drain(settings)
     elif args.command in {"reconcile", "replay-unposted"}:
-        with httpx.Client(base_url=settings.erp_url, timeout=3) as http:
+        with client(settings, settings.erp_url) as http:
             if args.command == "reconcile":
                 result = reconcile(settings.cap_dsn, http)
                 event("reconciliation.result", **result)

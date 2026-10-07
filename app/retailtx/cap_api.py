@@ -2,13 +2,14 @@ from time import perf_counter
 
 import httpx
 import psycopg
+from azure.core.exceptions import AzureError
 from fastapi import FastAPI
 from opentelemetry.trace import StatusCode
 
 from retailtx import storage
 from retailtx.contracts import Checkout, Conflict, EvidenceUnavailable, Posting, Price
 from retailtx.db import connect
-from retailtx.http import setup
+from retailtx.http import client, setup
 from retailtx.reconciliation import status
 from retailtx.settings import Settings
 from retailtx.telemetry import SpanKind, carrier, configure, event, tracer
@@ -16,15 +17,16 @@ from retailtx.telemetry import SpanKind, carrier, configure, event, tracer
 
 def create_app() -> FastAPI:
     settings = Settings.from_env()
-    configure("cap-api")
-    app = FastAPI(title="RetailTx local checkout")
+    _ = settings.cap_dsn
+    configure("cap-api", settings)
+    app = FastAPI(title="RetailTx checkout")
     setup(app)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         with connect(settings.cap_dsn) as conn:
             conn.execute("SELECT transaction_id FROM outbox LIMIT 1")
-        return {"status": "healthy", "mode": "local"}
+        return {"status": "healthy", "mode": settings.mode}
 
     @app.post("/transaction", response_model=Posting, status_code=202)
     def checkout(request: Checkout) -> Posting:
@@ -42,9 +44,8 @@ def create_app() -> FastAPI:
                     record_exception=False,
                     set_status_on_exception=False,
                 ):
-                    response = httpx.get(
-                        f"{settings.erp_url}/price/{request.sku}", headers=carrier(), timeout=3
-                    )
+                    with client(settings, settings.erp_url) as http:
+                        response = http.get(f"/price/{request.sku}", headers=carrier())
                     response.raise_for_status()
                     try:
                         return Price.model_validate(response.json())
@@ -53,7 +54,13 @@ def create_app() -> FastAPI:
 
             try:
                 result = storage.accept(settings.cap_dsn, request, lookup)
-            except (Conflict, EvidenceUnavailable, httpx.HTTPError, psycopg.Error) as exc:
+            except (
+                Conflict,
+                EvidenceUnavailable,
+                httpx.HTTPError,
+                psycopg.Error,
+                AzureError,
+            ) as exc:
                 span.set_status(StatusCode.ERROR)
                 event(
                     "checkout.attempt",

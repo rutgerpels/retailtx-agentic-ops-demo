@@ -11,12 +11,22 @@ The **local transaction slice** is implemented with FastAPI, two PostgreSQL
 databases, the official Service Bus emulator, an outbox, idempotent posting,
 reconciliation, traces, and a reversible backlog fault. See the
 [local guide](docs/local-development.md) for reproducible commands and recovery
-verification. It does not deploy the application to Azure or establish
-approval-gated SRE healing; the Stage 0 approved-action gate remains open.
+verification.
+
+The **private Azure application profile** adds two peered VMs, an Arc-managed
+simulated datacenter, Entra-authenticated managed services, mutual TLS, telemetry,
+static alerts, and an owned deploy/verify/reset/destroy lifecycle. **It is not
+customer-demo-ready:** live acceptance is blocked by intermittent Arc command
+delivery, and the final trace fixes have not been verified in Azure. See the
+[Azure application guide](docs/azure-deployment.md) for live acceptance status
+and commands. Operator recovery is not approval-gated SRE healing; that gate
+remains open.
 
 ## Recommended direction
 
-- Build one reliable incident end to end before expanding the topology.
+- Prove one small SRE-led hybrid incident with Azure-side remediation before
+  expanding the topology or deployment automation. Keep Arc guest commands off
+  the live-demo critical path until separately proven reliable.
 - Use Azure Monitor for evidence and Azure SRE Agent for investigation and
   approval-gated recovery.
 - Make Azure Copilot Observability Agent an optional Azure Monitor investigation
@@ -29,8 +39,8 @@ approval-gated SRE healing; the Stage 0 approved-action gate remains open.
 
 See the [staged architecture and implementation plan](docs/implementation-plan.md)
 for the assessment, technology choices, lifecycle contract, delivery gates, and
-current Microsoft documentation. Stages 2 onward remain proposed; the Stage 0
-fixture is not the complete retail demo.
+current Microsoft documentation. The SRE-led incident and customer-repeatable
+release remain later stages; the foundation fixture is not the complete demo.
 
 All scenarios use synthetic data. Azure-hosted "on-premises" machines are an
 explicit evaluation simulation, not a production hybrid deployment.
