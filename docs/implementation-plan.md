@@ -1,17 +1,23 @@
 # RetailTx: staged architecture and implementation plan
 
-**Status:** proposed design; implementation not started.
+**Status:** private Stage 0 foundation deployed and verified; approved-action gate
+still open. Later stages remain proposed.
 **Assessment date:** 2026-10-07.
-**Scope:** improve the existing project brief and define a reusable demo product,
-not deploy Azure resources or implement the application in this change.
+**Scope:** define a reusable demo product and begin the disposable infrastructure
+integration proof. The transaction application is not implemented.
+
+The [Stage 0 deployment guide](deployment-stage0.md) describes the implemented
+private networking, Entra identities, infrastructure automation, fixed operator
+verification, and owned teardown. Its read-only SRE configuration does not satisfy
+the approved-action exit gate below. No budgets or scheduled expiry are configured.
 
 ## 1. Assessment and recommendation
 
-The checkout contains `.github/copilot-instructions.md`, contributor instructions,
-agent and skill definitions, and `.gitignore`. It does not contain the application,
-infrastructure, operational documentation, tests, or workflows described in the
-brief. No repository issues or pull requests were found during this assessment;
-there is no existing Ready queue to sequence.
+At the initial assessment, the checkout contained only the project brief,
+contributor tooling, and `.gitignore`, with no application, infrastructure,
+tests, issues, or pull requests. The subsequent Stage 0 implementation is tracked
+in [issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2);
+it adds infrastructure, lifecycle scripts, documentation, and offline tests.
 
 The strongest part of the design is the connection between a technical incident
 and **accepted sales not yet posted to the ERP, expressed in EUR per country**.
@@ -37,9 +43,10 @@ repeatable deploy-reset-destroy lifecycle.
 - Only synthetic stores, brands, transactions, and monetary values are used.
   Committed profiles have generic identifiers, never customer or people names.
 - Reliable demonstrations and reproducibility matter more than production HA.
-- Recommendations below are proposals for review, not completed capabilities.
-  No subscription entitlement, quota, runtime behavior, or deployment duration
-  has been tested in this assessment.
+- Recommendations for later stages are proposals, not completed capabilities.
+  Stage 0 subscription/region/provider and quota preflight has been performed;
+  live integration evidence belongs in the deployment guide, not assumptions
+  that every proposed product capability is already working.
 
 ## 2. What is the Observability Agent actually for?
 
@@ -203,7 +210,7 @@ historical trend must be visibly labeled synthetic, not a learned live forecast.
 
 ## 5. Delivery stages and acceptance gates
 
-These are delivery gates, not calendar promises or filed backlog tickets. Stage 0
+These are delivery gates, not calendar promises. Stage 0
 and Stage 1 can proceed independently. Stage 2 depends on both; Stage 3 depends on
 Stage 2; Stage 4 depends on Stage 3. Stage 5 contains optional, separately scoped
 extensions, not a requirement for the first customer demonstration.

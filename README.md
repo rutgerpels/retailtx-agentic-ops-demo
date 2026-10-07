@@ -1,12 +1,14 @@
 # RetailTx
 
-A proposed, reusable demo of agent-assisted operations for a hybrid retail
+A staged, reusable demo of agent-assisted operations for a hybrid retail
 transaction chain: cloud checkout, an on-premises ERP, asynchronous posting,
 and business impact measured as unposted sales value.
 
-**Status: design only.** The repository contains the project brief and contributor
-tooling. Application code, infrastructure, deployment commands, and agent
-integrations have not been implemented.
+**Status: private Stage 0 foundation deployed and verified.** Infrastructure and
+lifecycle commands support a disposable, Entra-only Arc/Monitor/SRE proof.
+See the [deployment guide](docs/deployment-stage0.md) for commands and limitations.
+The transaction application and approval-gated SRE healing are not implemented;
+the overall Stage 0 approved-action gate remains open.
 
 ## Recommended direction
 
@@ -23,8 +25,8 @@ integrations have not been implemented.
 
 See the [staged architecture and implementation plan](docs/implementation-plan.md)
 for the assessment, technology choices, lifecycle contract, delivery gates, and
-current Microsoft documentation. These are proposed decisions, not a claim that
-the demo can already be deployed.
+current Microsoft documentation. Later stages remain proposed; the Stage 0
+fixture is not the complete retail demo.
 
 All scenarios use synthetic data. Azure-hosted "on-premises" machines are an
 explicit evaluation simulation, not a production hybrid deployment.
