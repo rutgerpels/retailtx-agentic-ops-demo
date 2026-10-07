@@ -253,6 +253,24 @@ rationale, Given/When/Then criteria, dependencies, estimate, labels, and Definit
 of Ready. Missing estimates or scoring inputs remain explicit assumptions with
 `needs-po-review`; this plan does not invent a scored Ready backlog.
 
+### Open work after the private foundation proof
+
+As of 2026-10-07, [issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2)
+is the only open repository issue. Its implementation is awaiting human review in
+[PR #1](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/1); there are no
+other Ready items. The following remain planned work, not completed capabilities
+or separately filed tickets. The first two can proceed independently.
+
+| Work remaining | Dependency or boundary |
+| --- | --- |
+| Prove a constrained SRE-to-Arc action with approval, denial, wrong-target rejection, and audit evidence; otherwise explicitly accept the operator fallback | Required before claiming healing; current SRE access remains read-only |
+| Build the local checkout/ERP, outbox, posting worker, reconciliation, simulator, and reversible backlog incident | Prove monetary totals and retry/idempotency behavior before Azure application rollout |
+| Deploy the application slice with private managed data services, application SDK identity, traces, workbook, and static alerts | Depends on the local slice; the existing Monitor identity proof does not prove Service Bus/database authentication |
+| Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
+| Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Depends on the application, telemetry, and enforced approval boundary |
+| Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
+| Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
+
 ## 6. Deployment, reset, and teardown are product features
 
 ### Configuration, not customer forks
@@ -269,12 +287,21 @@ profile; validate and review the generated context before enabling actions.
 
 Use environment-scoped cloud, simulated-datacenter, and operations resource groups.
 Include an environment ID in names, not just a region, to avoid collisions.
+For future deployments, use stable workload/component names and a neutral generic
+ID such as `demo01`: for example, `rg-retailtx-ops-demo01-swedencentral`.
+Do not encode delivery stages, phases, or milestones in resource names, environment
+IDs, or reusable deployment artifacts. Delivery stages remain useful for planning,
+not runtime identity. Existing proof names and ownership manifests are retained;
+changing this convention does not authorize renaming or recreating live resources.
 Tag resources with `demo=retailtx`, `environmentId`, `profile`, `expiresAt`,
 `managedBy`, and generic `site`/`system` values where applicable.
 
 ### Proposed operator contract
 
-The following are **future commands**, not scripts that exist today.
+The following is the **full future application contract**. The narrower foundation
+operations `Preflight`, `Up`, `Status`, `Verify`, and `Down` already exist in
+`scripts/Invoke-Stage0.ps1`; application readiness, `scenario`/`reset`, and CI/expiry
+automation do not.
 
 | Operation | Required behavior |
 | --- | --- |
@@ -399,8 +426,15 @@ before choosing deployment regions or making customer-facing commitments.
 - **[S9]** [Cloud-native scripting and task automation with Arc-enabled servers](https://learn.microsoft.com/en-us/azure/azure-arc/servers/cloud-native/scripting-task-automation):
   Arc remote execution, not proof of an integrated SRE remediation path.
 
-**Still to prove in Stage 0:** tenant-specific availability and permissions;
-repeatable SRE data-plane authentication in CI; Arc application identity after
-IMDS blocking; and an enforceable, approval-gated SRE-to-Arc fixed action.
+**Verified for the current target:** service availability and deployment
+permissions in Sweden Central, Arc onboarding with blocked Azure IMDS,
+Entra-authenticated private Monitor access from both Arc and the SRE workspace,
+operator-driven SRE knowledge configuration, and owned teardown/recreation.
+See the [deployment evidence](deployment-stage0.md#deployment-evidence-and-tenant-caveats).
+
+**Still to prove:** repeatable SRE data-plane authentication in CI; Arc application
+SDK identity for Service Bus and databases after IMDS blocking; and an enforceable,
+approval-gated SRE-to-Arc fixed action. Repeat availability and permission checks
+for each new tenant/subscription/region.
 Until those pass, label the experience "investigate and propose" rather than
 claiming fully automated healing.

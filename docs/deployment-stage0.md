@@ -38,26 +38,34 @@ key. Its temporary private key is immediately deleted and SSH is disabled on the
 guest. Operational access is through Entra-authenticated Azure/Arc operations,
 not that key.
 
+For **new** environments, always pass a neutral identifier such as `demo01`;
+delivery stages are not a resource naming convention. The existing proof still
+uses `stage0`: use that exact value when inspecting or destroying it. Do not rename
+its manifest or change its ownership tags. Existing script/artifact names remain
+for compatibility; future reusable deployment tooling must use capability-based
+names instead of delivery-stage names.
+
 ```powershell
 $subscriptionId = '<your-subscription-guid>'
+$environmentName = 'demo01' # Use 'stage0' only for the existing proof.
 
 .\scripts\Invoke-Stage0.ps1 -Operation Preflight `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName
 
 .\scripts\Invoke-Stage0.ps1 -Operation Up `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName
 
 .\scripts\Invoke-Stage0.ps1 -Operation Status `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName
 
 .\scripts\Invoke-Stage0.ps1 -Operation Verify `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName
 
 .\scripts\Invoke-Stage0.ps1 -Operation Down `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0 -WhatIf
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName -WhatIf
 
 .\scripts\Invoke-Stage0.ps1 -Operation Down `
-    -SubscriptionId $subscriptionId -EnvironmentName stage0
+    -SubscriptionId $subscriptionId -EnvironmentName $environmentName
 ```
 
 `Up` previews infrastructure before provisioning with `azd`, waits for Arc

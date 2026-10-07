@@ -223,6 +223,13 @@ docs/
 
 **Naming & tags.** Environment-scoped cloud, simulated-datacenter and operations resource groups; include a generic environment ID and region to prevent collisions. Tags: `demo=retailtx`, `environmentId`, `profile`, `expiresAt`, `managedBy`, plus applicable `system=CAP|ERP` and `site=cloud|dc1`. Country belongs on business telemetry when infrastructure is shared.
 
+Use stable workload/component names and neutral environment IDs such as `demo01`.
+Do not include delivery stages, phases, or milestone numbers in new resource names,
+environment IDs, or reusable deployment artifact names. Stages belong in the
+delivery plan, not the naming convention. Preserve existing proof names and
+ownership manifests until an explicit replacement is planned; do not rename or
+recreate live resources just to apply this rule.
+
 ## 9. Staged build plan
 
 | Stage | Deliverable | Exit criterion |
@@ -252,13 +259,14 @@ three-week promise. Do not implement the full vision in one change.
 
 - [ ] Optional Observability Agent experience and availability; no automatic handoff dependency.
 - [ ] SRE Agent action support on **Arc‑connected machines** — decides whether *Heal* is live or a proposed action.
-- [ ] SRE Agent preview enrolment / region for the subscription.
+- [x] SRE Agent availability, deployment, and read-only private telemetry query verified in the authorized subscription in Sweden Central; recheck for other targets.
 - [ ] Repeatable SRE data-plane configuration in CI; mandatory skipped steps must fail readiness.
-- [ ] Arc bootstrap and application identity after Azure IMDS is blocked.
+- [x] Arc bootstrap and Entra-authenticated private Monitor query verified after Azure IMDS blocking.
+- [ ] Arc application SDK identity for Service Bus and database access; the Monitor proof does not establish those paths.
 - [ ] Scope-external cleanup, soft deletion/retention, expired environments, and isolated agent memory.
 - [ ] Which on‑prem monitoring tool the customer actually uses (mimic it in v0.2).
 - [ ] Homelab public IP/DDNS and upload bandwidth (v1.0 only).
-- [ ] Cost guardrail: budget alert on both resource groups; VPN gateways and VMs are the main spend.
+- Budget alerts are not required for the authorized deployment. No budgets are created; explicit retention and teardown remain the lifecycle controls, with automated expiry still open.
 
 ## 12. Conventions
 
