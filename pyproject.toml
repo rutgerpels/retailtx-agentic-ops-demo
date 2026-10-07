@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "retailtx"
+version = "0.1.0"
+description = "Synthetic local retail transaction and recovery slice"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "azure-servicebus==7.14.3",
+  "fastapi==0.142.2",
+  "httpx==0.28.1",
+  "opentelemetry-sdk==1.45.0",
+  "psycopg[binary]==3.3.6",
+  "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+  "editables==0.5",
+  "hatchling==1.32.4",
+  "mypy==2.3.1",
+  "pytest==9.1.1",
+  "ruff==0.16.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app/retailtx"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/local"]
+addopts = "-ra"
+pythonpath = ["."]
+markers = ["integration: requires the isolated local Compose stack"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["app/retailtx", "sim", "chaos"]
