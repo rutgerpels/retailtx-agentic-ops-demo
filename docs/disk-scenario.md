@@ -1,7 +1,7 @@
 # Windows Arc disk-capacity scenario
 
-**Status: blocked at live incident preflight, not customer-ready.** The target
-milestone remains deliberately operator-first:
+**Status: one operator-first incident verified, not customer-ready.** A fresh
+fixture completed the following flow on 2026-10-08:
 
 1. Introduce bounded pressure on a disposable data volume.
 2. Receive a real Azure Monitor alert.
@@ -52,6 +52,10 @@ The OS volume is not stressed.
 
 ## Observed integration evidence, 2026-10-08
 
+The original and replacement `demo03` attempts below preceded the successful
+`demo04` incident. Their failures and safety evidence remain separate from the
+new fixture's acceptance record.
+
 | Boundary | Evidence and limit |
 | --- | --- |
 | Private Windows Arc onboarding | Connected Machine agent connected through the expected private-link scope after the native management transition |
@@ -70,17 +74,16 @@ The OS volume is not stressed.
 | Policy-installed monitoring agent | Policy started AMA installation before the monitoring template reached its extension resource, causing HCRP409. A manual retry after installation unnecessarily updated AMA and exceeded the 15-minute deployment observer, although it later succeeded. The lifecycle now verifies and preserves an existing agent; for this exact conflict only, it waits up to ten minutes and retries the declarative deployment once without rewriting AMA. The preservation path subsequently completed in about 74 seconds |
 | Replacement incident preparation | Fresh private Perf/Event queries, SRE connectivity and the exact-target Review plan passed. An initial Fault call stopped before submission because the latest guest event was older than the three-minute limit. A second attempt's read-only telemetry command exceeded the four-minute observer and was still Creating / Unknown at 20:06 UTC, more than twelve minutes after submission. No full fault was submitted on this replacement |
 | Cleanup and recreation | Teardown removed the original fixture, external grants and owned SRE configuration, restored the original shared settings, and succeeded again on repetition. Failed-provisioning generations and the final unready replacement were also removed. Final repeat teardown and an independent read at 20:13 UTC confirmed no fixture or owned workspace grants, removed SRE configuration, and the original foundation-only scope with no incident platform. The foundation remains intentionally retained and billable |
-| Complete incident | A fired disk alert, automatic SRE investigation, operator-script recovery and SRE resolution are not yet accepted as verified |
+| Complete incident | Subsequently verified once on fresh `demo04`, as recorded below; this does not erase the earlier command-delivery failures |
 
 **Reliability assessment:** do not use this guest-command path as the primary
-live customer demo yet. The failure is before fault injection, not evidence
-that SRE failed to diagnose an alert. Short successful commands followed by an
-unresolved read-only command show that delivery/result timing is not predictable
-enough. The bounded attempt was stopped without replaying a mutation or relaxing
-freshness checks. The remaining question is reliable Arc command delivery and
-reporting in this evaluation-hosted environment; neither the root cause nor a
-general limitation of Arc-managed VMs has been established. Retain the verified
-native-action fallback rather than adding another guest-command transport.
+live customer demo yet. The earlier failure was before fault injection, not
+evidence that SRE failed to diagnose an alert. The fresh successful incident
+proves the operator-first integration can work, but not predictable delivery
+across repeated runs or fresh deployments. Neither the root cause of the earlier
+stalls nor a general limitation of Arc-managed VMs has been established. Retain
+the verified native-action fallback rather than adding another guest-command
+transport or relaxing freshness checks.
 
 Short successful Windows commands disprove a blanket assertion that Arc cannot
 execute on a VM. They do not establish reliable command delivery, explain the
@@ -93,6 +96,71 @@ cancellation: an accepted remote installation can still execute later.
 New commands retain their exact per-command `.request.json`, including the
 completion nonce, before submission. Verified results are retained separately.
 An authentication failure during polling also does not cancel the guest action.
+Completed Run Command resources now remain on the owned fixture until `Down`
+deletes the fixture. This removes unnecessary inter-command deletion from the
+incident path and preserves Azure-side evidence. It is a lifecycle simplification
+being evaluated, not an established explanation of the earlier stalls.
+The [Arc Run Command documentation](https://learn.microsoft.com/en-us/azure/azure-arc/servers/run-command)
+describes command resources as retained, listable objects and deletion as a
+separate operation that can terminate an in-progress script.
+
+### First complete operator-first incident
+
+Fresh `demo04` passed three probes, installation, Doctor and its own independent
+canary. Its watchdog recovered the canary at 20:37:32 UTC, about 27 seconds after
+the deadline. The original fixture's reboot proof does not transfer to this one.
+Provisioning through arming took approximately 28 minutes, including monitoring
+warm-up and RBAC propagation. The first private telemetry request returned an
+explicit workspace authorization failure immediately after role creation; a
+later request succeeded without broadening permissions.
+
+All times below are UTC on 2026-10-08, for run
+`920e0b3c-e445-4f40-91be-45ba213d19d8`.
+
+| Time | Verified event |
+| --- | --- |
+| 20:50:19 | Bounded fault requested; independent recovery deadline was 21:11:50 |
+| 20:52:45 | Guest observation showed `R:` at 8% free, with IIS HTTP 200 |
+| 20:57:31 | Azure Monitor fired the exact-target disk alert |
+| 20:58:28 | SRE automatically created the investigation thread, about 56 seconds after the alert |
+| 21:00:31 | SRE had queried private evidence and proposed the supplied operator command with the actual run ID |
+| 21:05:26 | The operator script recovered the same run to 99.43% free, before the watchdog deadline; IIS remained HTTP 200 |
+| 21:07:55 | In the same thread, SRE verified post-recovery Perf and matching healthy Event evidence and recorded an RCA |
+| 21:17:36 | Azure Monitor automatically changed `monitorCondition` to `Resolved`; no forced state change was made |
+| 21:18:52 | SRE recorded its final note after another private query: 99.44% free, same-run healthy state, IIS 200 and a fresh watchdog |
+
+Investigation started from the actual alert, not a manually created incident.
+After recovery, follow-up messages in that existing thread requested independent
+verification and the final note. The recovery actor was **operator-script**,
+not SRE or the watchdog. No guest-write permission was granted to SRE.
+
+The monitoring condition resolved, but `alertState` remained `New`; the exact
+SRE incident detail reported `AuthorizationBlocked` for acknowledgment and
+status `new`. This is a separate incident-workflow limitation, not failed disk
+recovery. Automatic acknowledgment/closure is **not** verified. No broader role
+was added and no external ITSM incident was fabricated.
+
+Collection responses lagged or omitted material metadata: the SRE incident
+query returned a null thread even after automatic investigation, and the Azure
+alert list still showed `Fired` after the individual alert had resolved. Inspect
+the exact incident and resource-scoped alert, rather than concluding no
+investigation or recovery from a list alone.
+
+This run does not pass a twelve-minute demo target: fault request to guest
+recovery took about 15 minutes (about 13 minutes from observed full pressure),
+including operator observation delays. Automatic alert clearance followed guest
+recovery by about 12 minutes. The final note was about 29 minutes after the fault
+request. Setup and telemetry warm-up are additional, separately measured work.
+One successful fixture is not three fresh cycles or a human rehearsal.
+
+Owned teardown completed at 21:26:35 UTC. Repeat `Down` and an independent read
+at 21:28:36 confirmed no fixture resource group or owned live resources, no owned
+workspace/bootstrap grants, no scenario investigator or response plan, and the
+original foundation-only SRE scope with no incident platform or disk-owner tag.
+Retained Run Command resources were removed with their Arc fixture. The
+foundation remains intentionally retained and billable. Local incident and
+teardown proofs remain under ignored `.azure\demo04`; historical telemetry,
+audit records and conversation history are not claimed as erased.
 
 ## Lifecycle commands
 
@@ -193,10 +261,10 @@ blocks further injection and safety tests until that exact run is resolved;
 recovering an older healthy run cannot clear the pending-fault gate.
 
 These implemented gates do not, by themselves, establish that an alert
-automatically started an investigation. The complete incident still needs live
-acceptance. The investigator is instructed to propose the supplied operator
-command, never execute it, and to distinguish operator, watchdog and
-injection-error cleanup actors.
+automatically started an investigation; verify the actual alert and its linked
+thread on every run. That boundary has now passed once. The investigator is
+instructed to propose the supplied operator command, never execute it, and to
+distinguish operator, watchdog and injection-error cleanup actors.
 
 Recovery requires the exact current fault ID from verified guest evidence:
 
@@ -222,13 +290,15 @@ as erased.
 ## Remaining acceptance gates
 
 - Predictably timed safety observation across reboot; recovery itself was observed.
-- A real below-threshold allocation and fired static alert from the corrected source.
-- A narrowly scoped, explicitly Review-mode SRE response plan triggered by the
-  actual alert, with sufficient private read access and no guest-write grant.
-- Operator-script recovery for the observed run, fresh healthy telemetry and
-  alert recovery, followed by SRE verification and an incident note.
 - Repeated incident/reset runs and fresh deploy/teardown cycles without hidden
   repairs, then human rehearsal. Provisioning and warm-up are measured separately.
+- Measure and meet a practical presentation duration; the first successful run
+  did not establish the twelve-minute target.
+- Decide the minimum scoped acknowledgment permission or explicitly keep the
+  unacknowledged incident boundary in the demo. Investigation, recovery evidence
+  and automatic monitor-condition clearance already worked without widening it.
+- Verify the post-recovery conversation flow with a human operator; the first
+  proof used follow-up messages to request SRE verification and its final note.
 
 Do not make automatic SRE-to-Arc remediation a prerequisite for these gates.
 If guest delivery cannot be reliable enough, choose a different supported host

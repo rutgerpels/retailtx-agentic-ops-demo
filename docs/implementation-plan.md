@@ -9,18 +9,19 @@ complete approved-incident gate remain open. Stage 1 local transaction slice imp
 Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
-The next user-directed milestone is the
-[operator-first Windows Arc disk scenario](disk-scenario.md): a real alert,
-SRE investigation/proposal, supplied operator recovery script and verified
-resolution. Private Windows telemetry, independent cleanup including across
-reboot, and Review-mode routing setup worked; delayed command-result visibility
-remains a reliability concern. The full incident remains unverified. Automatic
-SRE-to-Arc execution is a later gate, not a prerequisite for this milestone.
+The user-directed [operator-first Windows Arc disk scenario](disk-scenario.md)
+has completed one real fault, alert-triggered SRE investigation/proposal,
+supplied operator-script recovery, private recovery verification, automatic
+monitor-condition clearance and final SRE note. Acknowledgment remained
+permission-blocked, and post-recovery verification used follow-up messages.
+Earlier Arc command stalls remain unexplained; repeatability, presentation
+timing and human rehearsal are open. Automatic SRE-to-Arc execution is a later
+gate, not a prerequisite for this milestone.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-08.
 **Scope:** reusable demo product, private infrastructure integration proof, and
-local transaction correctness, the private Azure application lifecycle, and a
-small native-action integration proof.
+local transaction correctness, the private Azure application lifecycle, a
+small native-action integration proof and an operator-first disk incident.
 Operator-driven recovery does not establish approved SRE healing.
 
 The [Stage 0 deployment guide](deployment-stage0.md) describes the implemented
@@ -310,11 +311,11 @@ complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Complete the operator-first disk-capacity incident: fault, alert, SRE investigation/proposal, fixed operator script, verification and resolution | Independent watchdog recovery, private Windows telemetry and Review routing setup worked again on a clean replacement after the PS5.1 fix. Live preflight then rejected stale evidence, followed by a read-only Arc command still Creating / Unknown after more than twelve minutes. No full fault was submitted on that replacement. This path is not recommended for a primary live demo until command timing and the actual alert-driven incident are proven; retain the native-action fallback and do not add another transport or require automatic SRE-to-Arc execution first |
+| Establish repeatability and presentation timing for the operator-first disk incident | One fresh fixture completed actual pressure, alert-triggered SRE investigation, exact-run operator recovery, fresh private telemetry, automatic monitor-condition clearance and an SRE note. Earlier Arc command stalls remain unexplained. Recovery took about 15 minutes from fault request and the final note about 29 minutes; acknowledgment remained AuthorizationBlocked. Repeat fresh cycles and rehearse before recommending a primary live demo; retain the native-action fallback |
 | Evaluate automatic guest recovery only after the operator-led incident is reliable | Separate Arc delivery, SRE tool support, approval boundaries and host/platform configuration. Native VM start remains the narrower verified fallback, not proof of guest remediation |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
-| Complete the evidence-backed SRE incident, recovery checks, RCA, and customer rehearsal | Start with the explicitly operator-led disk scenario; retain the native-action fallback and do not make the deferred full application topology a prerequisite |
+| Rehearse the verified disk investigation/recovery/RCA flow and settle the acknowledgment boundary | The first proof used post-recovery follow-up messages and left alertState New despite monitorCondition Resolved. Prove a clear human-operated presentation without claiming autonomous guest healing or requiring the deferred full application topology |
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
 | Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
 

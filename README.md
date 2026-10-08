@@ -28,21 +28,22 @@ private Arc heartbeat evidence. Three consecutive automated runs completed in
 a start-only role on one isolated VM. These were not human rehearsals. This is
 hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
-The next milestone is an [operator-first Windows Arc disk incident](docs/disk-scenario.md):
-real fault, alert, SRE investigation, supplied operator recovery script, and
-evidence-backed resolution. Private Windows telemetry, independent cleanup
-(including across reboot), and Review-mode alert routing setup worked.
-A clean replacement again reached the command-timing gate: a read-only Arc
-request remained unresolved for over twelve minutes before any full fault was
-submitted. The complete incident is unverified and this path is not recommended
-for a primary live demo yet. The fixture was removed; the OS disk was never
-filled. Automatic SRE-to-Arc remediation is deferred.
+An [operator-first Windows Arc disk incident](docs/disk-scenario.md) has now
+worked once: `R:` reached 8% free, Azure Monitor alerted, SRE automatically
+investigated and proposed the supplied script, and operator recovery restored
+99.43% free. SRE verified private telemetry and wrote the incident note; the
+monitor condition cleared automatically. Acknowledgment remained permission-blocked.
+IIS stayed healthy and the OS disk was never filled. Earlier Arc command stalls
+remain unexplained; repeatability, presentation timing and human rehearsal are
+not accepted, so retain the native-action fallback. Automatic SRE-to-Arc
+remediation is deferred. The test fixture and its external grants were removed;
+the foundation remains intentionally retained and billable.
 
 ## Recommended direction
 
-- Prove the operator-first disk scenario before attempting automatic guest
-  remediation. Keep the proven native Azure action as a fallback; do not present
-  intermittent Arc command delivery as a customer-ready path.
+- Prove repeatability of the operator-first disk scenario before attempting
+  automatic guest remediation. Keep the proven native Azure action as a fallback;
+  one successful incident does not make intermittent Arc delivery customer-ready.
 - Use Azure Monitor for evidence and Azure SRE Agent for investigation and
   approval-gated recovery.
 - Make Azure Copilot Observability Agent an optional Azure Monitor investigation

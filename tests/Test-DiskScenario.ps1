@@ -456,6 +456,40 @@ $script:checks++
     $script:checks++
 }
 & {
+    $state=$state.Clone()
+    $directory='C:\offline-fixture'
+    $fixture=@{request=$null;records=[Collections.Generic.List[object]]::new();puts=0}
+    function Get-OwnedMachine {param([switch]$Arc);@{properties=@{status='Connected'}}}
+    function Save-State {}
+    function Save-RetailState {
+        param($Value,$Path)
+        $fixture.records.Add(@{value=$Value;path=$Path})
+        if($Path.EndsWith('.request.json')){$fixture.request=$Value}
+    }
+    function Invoke-Azure {
+        param($Arguments)
+        if($Arguments[0] -cne 'rest' -or $Arguments[2] -cne 'put'){
+            throw 'Completed command must remain until owned fixture teardown'
+        }
+        $fixture.puts++
+    }
+    function Get-ArcCommand {
+        param($CommandId)
+        $source=$fixture.request.properties.source.script
+        $marker=[regex]::Match($source,'RETAILTX_GUEST_RESULT:[0-9a-f-]{36}').Value
+        return @{id=$CommandId;properties=@{provisioningState='Succeeded';source=@{script=$source}
+            instanceView=@{executionState='Succeeded';exitCode=0;error='';output="observed`n$marker"}}}
+    }
+    $first=Invoke-ArcCommand -Purpose status -Script "Write-Output 'observed'"
+    $second=Invoke-ArcCommand -Purpose status -Script "Write-Output 'observed'"
+    if($fixture.puts -ne 2 -or $fixture.records.Count -ne 6 -or
+        $first.commandId -ceq $second.commandId -or $first.nonce -ceq $second.nonce -or
+        $first.output -cne 'observed' -or $second.output -cne 'observed'){
+        throw 'Independent command evidence was lost or a completed command was replayed'
+    }
+    $script:checks++
+}
+& {
     $guest=[System.Management.Automation.Language.Parser]::ParseFile(
         (Join-Path $PSScriptRoot '..\scripts\disk\Invoke-DiskGuest.ps1'),[ref]$null,[ref]$null)
     $function=$guest.Find({param($node)

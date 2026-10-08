@@ -232,8 +232,6 @@ Write-Output '$marker'
             }
             Save-RetailState $command (Join-Path $directory "$commandName.result.json")
             Save-RetailState $command (Join-Path $directory "last-$Purpose.json")
-            $null = Invoke-Azure @('rest', '--method', 'delete', '--url',
-                "https://management.azure.com${commandId}?api-version=$arcApi")
             return @{ nonce = $nonce; commandId = $commandId; transport = 'HybridCompute'
                 output = $output.Substring(0, $output.Length - $marker.Length).Trim()
                 executionState = $view.executionState; exitCode = $view.exitCode; timestamp = [DateTimeOffset]::UtcNow.ToString('o') }
