@@ -1,7 +1,7 @@
 # Windows Arc disk-capacity scenario
 
-**Status: integration work, not a customer-ready incident.** The next milestone
-is deliberately operator-first:
+**Status: blocked at live incident preflight, not customer-ready.** The target
+milestone remains deliberately operator-first:
 
 1. Introduce bounded pressure on a disposable data volume.
 2. Receive a real Azure Monitor alert.
@@ -68,9 +68,19 @@ The OS volume is not stressed.
 | Fresh provisioning downloads | Windows PowerShell twice returned a short MSI without a download exception; signature checks rejected it as NotSigned or UnknownError before installation. Bootstrap now uses bounded HTTPS-only curl downloads, checks its exit code and still requires a valid Microsoft signature. A subsequent clean deployment completed successfully with the verified package; it never installs an unverified package |
 | Replacement fixture safety | Three consecutive fresh Arc probes completed, followed by installation, Doctor and independent canary recovery at 19:25:59 UTC, about 69 seconds after the deadline. The replacement reported 99.43% free and IIS 200. The earlier reboot proof belongs to the original fixture, not this replacement |
 | Policy-installed monitoring agent | Policy started AMA installation before the monitoring template reached its extension resource, causing HCRP409. A manual retry after installation unnecessarily updated AMA and exceeded the 15-minute deployment observer, although it later succeeded. The lifecycle now verifies and preserves an existing agent; for this exact conflict only, it waits up to ten minutes and retries the declarative deployment once without rewriting AMA. The preservation path subsequently completed in about 74 seconds |
-| Replacement incident preparation | Fresh private Perf/Event queries, SRE connectivity and the exact-target Review plan passed. An initial Fault call stopped before submission because the latest guest event was older than the three-minute limit; missing freshness is not waived to get a demonstration running |
-| Cleanup and recreation | Teardown removed the original fixture, external grants and owned SRE configuration, restored the original shared settings, and succeeded again on repetition. Subsequent failed-provisioning fixtures were also removed before recreation; historical success does not count as readiness for a new owner |
+| Replacement incident preparation | Fresh private Perf/Event queries, SRE connectivity and the exact-target Review plan passed. An initial Fault call stopped before submission because the latest guest event was older than the three-minute limit. A second attempt's read-only telemetry command exceeded the four-minute observer and was still Creating / Unknown at 20:06 UTC, more than twelve minutes after submission. No full fault was submitted on this replacement |
+| Cleanup and recreation | Teardown removed the original fixture, external grants and owned SRE configuration, restored the original shared settings, and succeeded again on repetition. Failed-provisioning generations and the final unready replacement were also removed. Final repeat teardown and an independent read at 20:13 UTC confirmed no fixture or owned workspace grants, removed SRE configuration, and the original foundation-only scope with no incident platform. The foundation remains intentionally retained and billable |
 | Complete incident | A fired disk alert, automatic SRE investigation, operator-script recovery and SRE resolution are not yet accepted as verified |
+
+**Reliability assessment:** do not use this guest-command path as the primary
+live customer demo yet. The failure is before fault injection, not evidence
+that SRE failed to diagnose an alert. Short successful commands followed by an
+unresolved read-only command show that delivery/result timing is not predictable
+enough. The bounded attempt was stopped without replaying a mutation or relaxing
+freshness checks. The remaining question is reliable Arc command delivery and
+reporting in this evaluation-hosted environment; neither the root cause nor a
+general limitation of Arc-managed VMs has been established. Retain the verified
+native-action fallback rather than adding another guest-command transport.
 
 Short successful Windows commands disprove a blanket assertion that Arc cannot
 execute on a VM. They do not establish reliable command delivery, explain the

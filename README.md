@@ -32,9 +32,11 @@ The next milestone is an [operator-first Windows Arc disk incident](docs/disk-sc
 real fault, alert, SRE investigation, supplied operator recovery script, and
 evidence-backed resolution. Private Windows telemetry, independent cleanup
 (including across reboot), and Review-mode alert routing setup worked.
-Command-result timing remains inconsistent, and the complete incident is not
-yet verified. The OS disk is never filled. Automatic SRE-to-Arc remediation
-is deferred.
+A clean replacement again reached the command-timing gate: a read-only Arc
+request remained unresolved for over twelve minutes before any full fault was
+submitted. The complete incident is unverified and this path is not recommended
+for a primary live demo yet. The fixture was removed; the OS disk was never
+filled. Automatic SRE-to-Arc remediation is deferred.
 
 ## Recommended direction
 
