@@ -23,8 +23,9 @@ and commands. Its operator recovery is not approval-gated SRE healing.
 
 A smaller [native-action proof](docs/native-action-proof.md) has verified an
 SRE native VM-start approval and execution, denial without execution, and
-private Arc heartbeat evidence. It uses a start-only role on one isolated VM.
-The decisions were automated integration tests, not human rehearsals. This is
+private Arc heartbeat evidence. Three consecutive automated runs completed in
+200-291 seconds, including incident notes, without operator recovery. It uses
+a start-only role on one isolated VM. These were not human rehearsals. This is
 hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
 ## Recommended direction

@@ -2,7 +2,7 @@
 
 > A demo environment that mimics a business‑critical retail transaction chain split across **on‑premises** and **Azure**, used to show how an *agentic operating model* (Azure Arc, Azure Monitor, Observability Agent, Azure SRE Agent and specialised agents) helps a small operations team run a hybrid landscape — without migrating first.
 
-- **Status:** private Stage 0 foundation and local Stage 1 slice verified; Stage 2 private Azure application lifecycle implemented but live acceptance blocked by Arc command delivery (see `docs/azure-deployment.md`). A smaller native SRE VM-start proof verifies automated approval/denial, action identity and private Arc evidence (`docs/native-action-proof.md`); human rehearsal and retail/business recovery remain open
+- **Status:** private Stage 0 foundation and local Stage 1 slice verified; Stage 2 private Azure application lifecycle implemented but live acceptance blocked by Arc command delivery (see `docs/azure-deployment.md`). A smaller native SRE VM-start proof verifies automated approval/denial, action identity and private Arc evidence, with three consecutive automated recovery/incident-note runs (`docs/native-action-proof.md`); human rehearsal and retail/business recovery remain open
 - **Stack:** Bicep · Python/FastAPI · PostgreSQL · Azure Service Bus · Azure Monitor · Azure Arc · Azure SRE Agent
 - **Not SAP:** the app is *SAP‑like*. Component names are generic on purpose.
 

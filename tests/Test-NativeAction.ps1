@@ -14,7 +14,7 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $PSScriptRoot '..\scripts\Invoke-NativeAction.ps1'), [ref]$null, [ref]$errors)
 if ($errors) { throw ($errors -join "`n") }
 foreach ($name in @('Get-OwnedGroup', 'Get-OwnedRole', 'Get-OwnedVm', 'Get-PowerState',
-    'Restore-OwnedVm', 'Complete-FaultRecovery', 'Remove-OwnedActionResources')) {
+    'Restore-OwnedVm', 'Complete-FaultRecovery', 'Remove-OwnedActionResources', 'Reset-DeletedActionState')) {
     $function = $ast.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -161,6 +161,22 @@ $script:checks++
 $script:exists = $false
 $script:role = $null
 if ((Get-OwnedGroup) -or (Get-OwnedRole)) { throw 'Repeat teardown must accept confirmed absence.' }
+$script:checks++
+$deletedState = @{
+    phase = 'deleted'; expiresAt = '2026-01-01T00:00:00Z'
+    faultStartedAt = 'old'; faultDeadline = 'old'; faultEndedAt = 'old'
+    operatorRecovery = $true; stopConfirmed = $false
+}
+Assert-Rejected { Reset-DeletedActionState $deletedState $script:group $null }
+Assert-Rejected { Reset-DeletedActionState $deletedState $null $ownedRole }
+Reset-DeletedActionState $deletedState $null $null
+if ([DateTimeOffset]$deletedState.expiresAt -lt [DateTimeOffset]::UtcNow.AddHours(3) -or
+    @($deletedState.Keys).Count -ne 2) { throw 'Recreation must renew expiry and clear stale fault metadata.' }
+$script:checks++
+$deletedState.phase = 'ready'
+$retainedExpiry = $deletedState.expiresAt
+Reset-DeletedActionState $deletedState $script:group $ownedRole
+if ($deletedState.expiresAt -cne $retainedExpiry) { throw 'Reapplication must not silently extend retention.' }
 $script:checks++
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $PSScriptRoot '..\scripts\Invoke-SreProof.ps1'), [ref]$null, [ref]$errors)

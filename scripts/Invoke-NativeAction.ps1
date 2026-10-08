@@ -142,6 +142,16 @@ function Complete-FaultRecovery {
     return $operatorRecovery
 }
 
+function Reset-DeletedActionState {
+    param([hashtable]$State, [object]$Group, [object]$Role)
+    if ($State.phase -cne 'deleted') { return }
+    if ($Group -or $Role) { throw 'Deleted manifest still has live resources; refusing recreation.' }
+    $State.expiresAt = [DateTimeOffset]::UtcNow.AddHours(4).ToString('o')
+    foreach ($key in @('faultStartedAt', 'faultDeadline', 'faultEndedAt', 'operatorRecovery', 'stopConfirmed')) {
+        $State.Remove($key)
+    }
+}
+
 function Remove-OwnedActionResources {
     param([object]$Group, [object]$Role)
     if ($Role) {
@@ -225,6 +235,7 @@ try {
             }
             Save-RetailState $script:state $statePath
         }
+        Reset-DeletedActionState $script:state $group $role
         $script:state.agentClientId = $identity.clientId
         $script:state.workspaceCustomerId = $foundation.outputs.WORKSPACE_CUSTOMER_ID
         $script:state.arcMachineId = "/subscriptions/$subscription/resourceGroups/$($foundation.resourceGroupName)/providers/Microsoft.HybridCompute/machines/$($foundation.outputs.ARC_MACHINE_NAME)"

@@ -59,6 +59,15 @@ generates an ephemeral SSH key, keeps only its public half, deletes both
 temporary key files, disables password login and requests SSH shutdown. The
 actual network boundary is the deny-all NSG and absence of public connectivity;
 SSH shutdown is not claimed as a guest-verified acceptance check.
+Recreating a confirmed deleted fixture renews its four-hour expiry reminder and
+clears prior fault results. Reapplying a live fixture does not extend retention.
+
+After an overnight pause, confirm the evaluation host is powered on as well as
+checking Arc `Connected` and a fresh private heartbeat. On 2026-10-08, Activity
+Log showed an overnight deallocation of the retained backing VM by a different
+principal, not the SRE action identity. An ownership-checked operator start
+restored Arc connectivity. The initiating automation/policy was not established
+or changed. This was preparation, not part of the measured SRE remediation.
 
 For a supervised interactive attempt, keep the fault command running in one
 terminal, then create the SRE thread in another:
@@ -160,18 +169,63 @@ background CLI startup issue was corrected by explicitly closing redirected
 stdin. Regression coverage also addresses foreign-resource adoption, bounded CLI
 execution, uncertain-stop recovery and approval checks after confirmation.
 
-**Pause checkpoint:** two native recoveries are development evidence, not three
-consecutive clean rehearsals. The explicit post-action verification subsequently
-produced an incident note: independently running VM, connected Arc host and a
-fresh private heartbeat at 21:46:26 UTC. Activity Log also confirmed the configured
-SRE identity executed the second start. The complete corrected repeat loop still
-needs acceptance. The work remains on draft PR #5; no customer-ready claim or
-human approval is implied. For this pause, the temporary start role was removed
-and Azure accepted deletion of the disposable group (`Deleting`). No local fault
-guard remains active. Final deletion convergence and repeat Down must be checked
-on resume before redeploying; this is not yet a zero-residual claim. The original
-foundation remains retained/billable. Raw thread and audit evidence remain in
-`.azure`.
+### Corrected repeatability gate, 2026-10-08
+
+The overnight fixture deletion converged; the group and custom role were absent,
+and repeat Down succeeded before recreation. Fresh Up took 181 seconds and
+repeat Up took 153 seconds. A separate 60-second fault exercised the independent
+operator recovery, followed by an explicit Reset. Neither is counted as SRE
+recovery.
+
+The corrected live harness then completed **three consecutive automated runs
+without operator recovery or between-run repairs**, using the same code release:
+
+| Run | Fault start (UTC) | Guard-observed recovery | Full flow, including incident note | Successful SRE start (UTC) |
+| --- | --- | --- | --- | --- |
+| 1 | 09:02:59 | 198 s | 269 s | 09:05:48 |
+| 2 | 09:07:51 | 147 s | 200 s | 09:09:38 |
+| 3 | 09:11:33 | 174 s | 291 s | 09:14:02 |
+
+Each run presented the native card, used exact-command automated authorization,
+and ended with a separately observed running VM and an explicit read-only
+verification/incident-note exchange. The saved private queries returned the
+exact Arc resource's heartbeat within 15 minutes; final query timestamps were
+09:04:15, 09:07:15 and 09:15:17 UTC respectively. Independent Azure Activity Log
+attributed all three successful starts to the configured SRE action identity.
+Missing stop/start audit evidence in an agent note was left explicit; later
+operator audit checks are separate evidence, not retroactive agent findings.
+
+Raw evidence remains in ignored `.azure`: rehearsal
+`sre-rehearsal-20261008T090240351Z.json`, its three saved thread files,
+`native-three-clean-activity.json`, and `native-three-clean-source.json`.
+Preparation/deployment and eventual audit availability are not included in the
+incident durations.
+
+A separate run exercised the committed Deny command: the native start card was
+cancelled at 09:19:53 UTC without starting execution. The VM stayed stopped until
+the independent five-minute fault timeout. The guard then restored it and
+recorded `operatorRecovery = true`, with confirmed recovery at 09:23:05 UTC.
+This demonstrates rejection plus operator safety recovery, not SRE healing.
+Independent Activity Log contained only the operator's start after timeout,
+and no SRE start in the denial window. Evidence is retained in
+`native-current-denial.json`, its saved thread and
+`native-current-denial-activity.json`.
+
+Final Down completed in 228 seconds; repeat Down and Status confirmed that the
+group and custom role were absent. Independent subscription inventory found
+zero owner-tagged live resources or remaining fixture/custom-role grants.
+No local recovery guard remains active. The original foundation remains
+retained/billable, with Arc still Connected. Cleanup evidence is recorded in
+`native-final-cleanup.json` and `native-final-inventory.json`; retained SRE
+threads and deployment history are not claimed as erased.
+
+**Assessment:** the smaller native action is a repeatable integration baseline
+worth building on, not yet a customer-ready hybrid incident. Three automated
+runs on one fixture are not three fresh customer deployments or human rehearsals.
+Keep Arc guest commands off the remediation path; next connect this action to
+one genuine hybrid service dependency and observable recovery, then rehearse
+the product UI. Do not resume the full deferred topology solely because this
+VM-start gate passed.
 
 The subscription's existing Guest Configuration policy attempted an extension
 on this deliberately extension-disabled fixture and received HTTP 409. No policy

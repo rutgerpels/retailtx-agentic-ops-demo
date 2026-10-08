@@ -293,6 +293,10 @@ built-in Azure CLI path: a pending VM-start card, cancellation without execution
 approved execution by the configured SRE managed identity, and independently
 observed recovery. SRE also read the retained Arc host's fresh heartbeat through
 private Monitor. The extra permissions are start-only at one disposable VM.
+On 2026-10-08, three consecutive automated recoveries and incident notes completed
+in 200-291 seconds without operator recovery. Independent Activity Log checks
+confirmed the configured SRE identity on every start. These were repeat incidents
+on one fixture, not three fresh deployments or customer UI rehearsals.
 
 This changes the recommendation from an unverified native-action candidate to a
 working integration path. It does **not** close this application's trace/guest

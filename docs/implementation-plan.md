@@ -2,14 +2,15 @@
 
 **Status:** private Stage 0 foundation deployed and verified; a constrained
 [native SRE VM-start proof](native-action-proof.md) now verifies native approval,
-denial, managed-identity execution and private Arc evidence. Human rehearsal and
-the complete approved-incident gate remain open. Stage 1 local transaction slice implemented and locally verified; see the
+denial, managed-identity execution and private Arc evidence, with three
+consecutive automated recoveries and incident notes. Human rehearsal and the
+complete approved-incident gate remain open. Stage 1 local transaction slice implemented and locally verified; see the
 [local guide](local-development.md) for commands, evidence, and limitations.
 Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
 Stages 3 onward remain proposed.
-**Assessment date:** 2026-10-07.
+**Assessment date:** 2026-10-08.
 **Scope:** reusable demo product, private infrastructure integration proof, and
 local transaction correctness, the private Azure application lifecycle, and a
 small native-action integration proof.
@@ -234,8 +235,10 @@ adding more command transports or retries is not the default response. The
 backlog scenario remains useful correctness evidence, not the required first
 live SRE scenario. This smaller integration proof does not waive the lifecycle,
 approval, or customer-release gates below. The subsequent native-action fixture
-has now verified the native path with automated decisions and private Arc
-evidence. It has no retail application or hybrid service dependency and therefore
+completed three consecutive automated recovery/incident-note runs on 2026-10-08
+in 200-291 seconds, without operator recovery. Independent audit confirmed the
+SRE identity for all three starts; private Arc evidence was refreshed. It has
+no retail application or hybrid service dependency and therefore
 does not satisfy Stage 3 business recovery or a human/no-terminal rehearsal.
 
 | Stage | Scope | Exit gate |
@@ -278,7 +281,7 @@ of Ready. Missing estimates or scoring inputs remain explicit assumptions with
 
 ### Open work after the private foundation proof
 
-As of 2026-10-07, the private foundation in
+As of 2026-10-08, the private foundation in
 [PR #1](https://github.com/rutgerpels/retailtx-agentic-ops-demo/pull/1) is merged and
 [issue #2](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/2) is closed.
 The local transaction slice was reviewed and merged in
