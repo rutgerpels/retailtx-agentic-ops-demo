@@ -308,6 +308,14 @@ UI rehearsal; do not resume the larger application deployment merely because a
 VM start worked. The stopped-on-prem-poster scenario remains useful correctness
 evidence and an explicitly human-run fallback.
 
+The subsequent user-directed next step is the
+[operator-first Windows Arc disk scenario](disk-scenario.md), rather than
+expanding the native VM-start scenario immediately. It must prove a real alert,
+SRE investigation/proposal, an explicitly operator-run fixed recovery script,
+and fresh recovery evidence before attempting automatic guest remediation.
+Successful short Windows Arc commands do not resolve this Linux profile's
+delivery failure, and its complete disk incident is not yet verified.
+
 ## Primary references
 
 - [Azure Arc managed identity](https://learn.microsoft.com/azure/azure-arc/servers/managed-identity-authentication)

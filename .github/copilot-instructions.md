@@ -5,6 +5,7 @@
 - **Status:** private Stage 0 foundation and local Stage 1 slice verified; Stage 2 private Azure application lifecycle implemented but live acceptance blocked by Arc command delivery (see `docs/azure-deployment.md`). A smaller native SRE VM-start proof verifies automated approval/denial, action identity and private Arc evidence, with three consecutive automated recovery/incident-note runs (`docs/native-action-proof.md`); human rehearsal and retail/business recovery remain open
 - **Stack:** Bicep · Python/FastAPI · PostgreSQL · Azure Service Bus · Azure Monitor · Azure Arc · Azure SRE Agent
 - **Not SAP:** the app is *SAP‑like*. Component names are generic on purpose.
+- **Next user-directed milestone:** the operator-first Windows Arc disk-capacity incident (`docs/disk-scenario.md`): real fault, alert, SRE investigation/proposal, supplied operator script and verified resolution. Private Windows telemetry, independent watchdog recovery including across reboot, and Review-mode routing setup worked. The complete incident is not yet verified, and observer timing remains inconsistent. Delayed command-result visibility is not proof that a command never ran. Automatic SRE-to-Arc remediation is deferred.
 
 **Delivery source of truth:** [staged architecture and implementation plan](../docs/implementation-plan.md).
 The plan records proposed stages, deployment/reset/teardown requirements, verified

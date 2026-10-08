@@ -9,6 +9,13 @@ complete approved-incident gate remain open. Stage 1 local transaction slice imp
 Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
+The next user-directed milestone is the
+[operator-first Windows Arc disk scenario](disk-scenario.md): a real alert,
+SRE investigation/proposal, supplied operator recovery script and verified
+resolution. Private Windows telemetry, independent cleanup including across
+reboot, and Review-mode routing setup worked; delayed command-result visibility
+remains a reliability concern. The full incident remains unverified. Automatic
+SRE-to-Arc execution is a later gate, not a prerequisite for this milestone.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-08.
 **Scope:** reusable demo product, private infrastructure integration proof, and
@@ -241,6 +248,15 @@ SRE identity for all three starts; private Arc evidence was refreshed. It has
 no retail application or hybrid service dependency and therefore
 does not satisfy Stage 3 business recovery or a human/no-terminal rehearsal.
 
+**Subsequent user-directed sequencing:** adapt the workshop's disk-capacity
+incident first, with explicit operator recovery. Use a separate disposable data
+volume, not an OS disk, and prove independent cleanup before applying pressure.
+This supersedes extending VM-start as the immediate next implementation step;
+the native-action proof remains a verified fallback. The disk milestone does
+not waive Stage 3's approved action/business-recovery criteria or Stage 4's
+customer repeatability criteria. Do not diagnose an unreliable operator
+transport as an SRE automation limitation without evidence.
+
 | Stage | Scope | Exit gate |
 | --- | --- | --- |
 | **0. Prove the risky integrations** | Small disposable proof of agent availability, IaC/data-plane configuration, Arc onboarding, identity, and one approved action | Given the intended subscription and region, agent configuration can be reapplied; an approved fixed-action path works, or the manual fallback is explicitly accepted. All spike resources are removed |
@@ -260,8 +276,9 @@ Stage 0 must specifically establish:
 - Azure cloud managed identity versus Arc identity behavior for Service Bus and
   application dependencies. Prove SDK token acquisition after Azure IMDS is blocked;
   do not silently substitute a shared broker connection string.
-- The precise SRE -> approved action -> selected execution target path. Prioritize
-  a verified native Azure action for the first hybrid incident. Arc Run Command
+- The precise SRE -> approved action -> selected execution target path. First
+  complete the selected operator-led incident; then test automatic execution
+  separately, retaining the verified native Azure action as a fallback. Arc Run Command
   exists, but that alone does not prove reliable delivery, SRE integration,
   approval semantics, or a safe command allow-list. [S9] If broad script execution
   cannot be constrained, retain read-only diagnosis plus a human-run fixed action.
@@ -293,10 +310,11 @@ complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Connect the proven native Azure action to one genuine hybrid service dependency, then rehearse human approval and recovery in the product UI | Native VM start, denial and action-identity audit are verified with automated decisions; exact-target harness rejection and scoped RBAC are checked. No alert response plan or business recovery is claimed; universal terminal-tool approval remains unproven |
+| Complete the operator-first disk-capacity incident: fault, alert, SRE investigation/proposal, fixed operator script, verification and resolution | Independent watchdog recovery, private Windows telemetry and Review routing setup worked. The first full allocation exposed a corrected PS5.1 arithmetic bug; require a real fired alert and complete incident from corrected source. Delayed command-result visibility still needs reliability assessment; do not require automatic SRE-to-Arc execution first |
+| Evaluate automatic guest recovery only after the operator-led incident is reliable | Separate Arc delivery, SRE tool support, approval boundaries and host/platform configuration. Native VM start remains the narrower verified fallback, not proof of guest remediation |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
-| Complete the evidence-backed SRE incident, recovery checks, RCA, and no-terminal rehearsal | Use a minimal service scenario around the native action; do not make the deferred full application topology a prerequisite |
+| Complete the evidence-backed SRE incident, recovery checks, RCA, and customer rehearsal | Start with the explicitly operator-led disk scenario; retain the native-action fallback and do not make the deferred full application topology a prerequisite |
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
 | Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
 

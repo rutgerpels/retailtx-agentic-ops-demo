@@ -28,11 +28,19 @@ private Arc heartbeat evidence. Three consecutive automated runs completed in
 a start-only role on one isolated VM. These were not human rehearsals. This is
 hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
+The next milestone is an [operator-first Windows Arc disk incident](docs/disk-scenario.md):
+real fault, alert, SRE investigation, supplied operator recovery script, and
+evidence-backed resolution. Private Windows telemetry, independent cleanup
+(including across reboot), and Review-mode alert routing setup worked.
+Command-result timing remains inconsistent, and the complete incident is not
+yet verified. The OS disk is never filled. Automatic SRE-to-Arc remediation
+is deferred.
+
 ## Recommended direction
 
-- Build the first customer flow around the proven native Azure action, adding
-  one genuine hybrid service dependency and recovery check before expanding
-  topology. Keep Arc guest commands off the live-demo critical path.
+- Prove the operator-first disk scenario before attempting automatic guest
+  remediation. Keep the proven native Azure action as a fallback; do not present
+  intermittent Arc command delivery as a customer-ready path.
 - Use Azure Monitor for evidence and Azure SRE Agent for investigation and
   approval-gated recovery.
 - Make Azure Copilot Observability Agent an optional Azure Monitor investigation

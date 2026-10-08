@@ -222,10 +222,11 @@ threads and deployment history are not claimed as erased.
 **Assessment:** the smaller native action is a repeatable integration baseline
 worth building on, not yet a customer-ready hybrid incident. Three automated
 runs on one fixture are not three fresh customer deployments or human rehearsals.
-Keep Arc guest commands off the remediation path; next connect this action to
-one genuine hybrid service dependency and observable recovery, then rehearse
-the product UI. Do not resume the full deferred topology solely because this
-VM-start gate passed.
+Keep unreliable Arc guest commands off a customer presentation's critical path.
+The subsequent user-directed milestone is the
+[operator-first disk incident](disk-scenario.md), with automatic guest execution
+deferred; this native proof remains a fallback. Do not resume the full deferred
+topology solely because this VM-start gate passed.
 
 The subscription's existing Guest Configuration policy attempted an extension
 on this deliberately extension-disabled fixture and received HTTP 409. No policy
