@@ -332,6 +332,54 @@ if ((Get-FileHash -LiteralPath '$scriptPath' -Algorithm SHA256).Hash -cne '$hash
     Save-RetailState $observation (Join-Path $directory 'guest-observation.json')
     return $observation
 }
+function Wait-DiskMonitorAgent {
+    param([string]$ExtensionId)
+    $deadline = [DateTimeOffset]::UtcNow.AddMinutes(10)
+    do {
+        $extension = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com${ExtensionId}?api-version=$arcApi")
+        if ($extension.id -ine $ExtensionId -or $extension.properties.publisher -cne 'Microsoft.Azure.Monitor' -or
+            $extension.properties.type -cne 'AzureMonitorWindowsAgent') { throw 'Unexpected existing monitoring extension.' }
+        $phase = $extension.properties.provisioningState
+        if ($phase -ceq 'Succeeded') { return }
+        if ($phase -cnotin @('Creating', 'Updating')) { throw "Existing monitoring extension reached $phase; refusing deployment retry." }
+        Start-Sleep -Seconds 20
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw 'Existing monitoring extension did not settle within ten minutes; no deployment retry was submitted.'
+}
+function Invoke-DiskMonitorDeployment {
+    param([string]$ParameterFile)
+    $arguments = @('deployment', 'group', 'create', '--resource-group', $groupName,
+        '--name', 'disk-monitor', '--template-file', (Join-Path $root 'infra\disk-monitor.bicep'),
+        '--parameters', "@$ParameterFile")
+    $extensionId = "$arcId/extensions/AzureMonitorWindowsAgent"
+    $extensions = Invoke-Azure @('rest', '--method', 'get', '--url',
+        "https://management.azure.com$arcId/extensions?api-version=$arcApi")
+    $existing = @($extensions.value | Where-Object { $_.properties.type -ceq 'AzureMonitorWindowsAgent' })
+    if ($existing.Count) {
+        if ($existing.Count -ne 1 -or $existing[0].id -ine $extensionId) { throw 'Unexpected existing monitoring extension identity.' }
+        Wait-DiskMonitorAgent $extensionId
+        $arguments += 'deployMonitoringAgent=false'
+    }
+    try { return Invoke-Azure $arguments -TimeoutSeconds 900 } catch {
+        $failure = $_
+        $deployment = Invoke-Azure @('deployment', 'group', 'show', '--resource-group', $groupName, '--name', 'disk-monitor')
+        if ($deployment.properties.provisioningState -cne 'Failed') { throw $failure }
+        $operations = @(Invoke-Azure @('deployment', 'operation', 'group', 'list',
+            '--resource-group', $groupName, '--name', 'disk-monitor'))
+        $failed = @($operations | Where-Object { $_.properties.provisioningState -ceq 'Failed' })
+        if (-not $failed.Count -or $existing.Count) { throw $failure }
+        foreach ($operation in $failed) {
+            $properties = $operation.properties
+            if (-not $properties.targetResource -or $properties.targetResource.id -ine $extensionId -or
+                -not $properties.statusMessage -or -not $properties.statusMessage.error -or
+                $properties.statusMessage.error.code -cne 'HCRP409') { throw $failure }
+        }
+        Write-Warning 'AMA is already being provisioned; waiting for that extension before one declarative deployment retry.'
+        Wait-DiskMonitorAgent $extensionId
+        return Invoke-Azure ($arguments + @('deployMonitoringAgent=false')) -TimeoutSeconds 900
+    }
+}
 function Set-MonitorAccess {
     param([ValidateSet('arc', 'alert')][string]$Target, [guid]$PrincipalId)
     if (-not $state.ContainsKey('monitorRoles')) { $state.monitorRoles = @{} }
@@ -617,9 +665,7 @@ try {
         $wrapped = @{}
         foreach ($key in $parameters.Keys) { $wrapped[$key] = @{ value = $parameters[$key] } }
         Save-RetailState @{parameters=$wrapped} $parameterFile
-        $deployment = Invoke-Azure @('deployment', 'group', 'create', '--resource-group', $groupName,
-            '--name', 'disk-monitor', '--template-file', (Join-Path $root 'infra\disk-monitor.bicep'),
-            '--parameters', "@$parameterFile") -TimeoutSeconds 900
+        $deployment = Invoke-DiskMonitorDeployment -ParameterFile $parameterFile
         $expectedAlert = "$groupId/providers/Microsoft.Insights/scheduledQueryRules/alert-retailtx-disk-$EnvironmentName"
         if ($deployment.properties.provisioningState -cne 'Succeeded' -or
             $deployment.properties.outputs.alertId.value -ine $expectedAlert) { throw 'Monitoring deployment did not establish the expected alert.' }

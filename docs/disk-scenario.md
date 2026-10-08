@@ -64,8 +64,11 @@ The OS volume is not stressed.
 | Private monitoring | Real `Perf` and `RetailTxDisk` Event 2100 records were verified through private DNS and Arc managed identity. Initial missing Event rows failed readiness rather than being treated as health; later records arrived after collection warm-up |
 | SRE read access | A separately labeled readiness thread queried actual private Windows telemetry. It was not an alert-created incident |
 | Alert routing setup | Azure Monitor connectivity and an exact-Arc Review response plan were verified; the alert and plan were armed only after private healthy evidence and the independent canary proof |
-| First full-allocation attempt | A Windows PowerShell 5.1 `Math.Min` overload selected Int32 for a greater-than-Int32 remaining size. The controller failed before filling the disk, performed its own cleanup, and exact-run recovery inspection confirmed 99.43% free and IIS 200. The arithmetic now uses Int64 and is checked in Windows PowerShell 5.1; the fixture is being recreated from the corrected source |
-| Fresh provisioning downloads | Windows PowerShell twice returned a short MSI without a download exception; signature checks rejected it as NotSigned or UnknownError before installation. The OS-provided curl retrieved a complete Microsoft-signed package in a separate diagnostic. Bootstrap now uses bounded HTTPS-only curl downloads, checks its exit code and still requires a valid Microsoft signature; it never installs an unverified package |
+| First full-allocation attempt | A Windows PowerShell 5.1 `Math.Min` overload selected Int32 for a greater-than-Int32 remaining size. The controller failed before filling the disk, performed its own cleanup, and exact-run recovery inspection confirmed 99.43% free and IIS 200. The arithmetic now uses Int64 and is checked in Windows PowerShell 5.1; the corrected controller was installed on a clean replacement fixture |
+| Fresh provisioning downloads | Windows PowerShell twice returned a short MSI without a download exception; signature checks rejected it as NotSigned or UnknownError before installation. Bootstrap now uses bounded HTTPS-only curl downloads, checks its exit code and still requires a valid Microsoft signature. A subsequent clean deployment completed successfully with the verified package; it never installs an unverified package |
+| Replacement fixture safety | Three consecutive fresh Arc probes completed, followed by installation, Doctor and independent canary recovery at 19:25:59 UTC, about 69 seconds after the deadline. The replacement reported 99.43% free and IIS 200. The earlier reboot proof belongs to the original fixture, not this replacement |
+| Policy-installed monitoring agent | Policy started AMA installation before the monitoring template reached its extension resource, causing HCRP409. A manual retry after installation unnecessarily updated AMA and exceeded the 15-minute deployment observer, although it later succeeded. The lifecycle now verifies and preserves an existing agent; for this exact conflict only, it waits up to ten minutes and retries the declarative deployment once without rewriting AMA. The preservation path subsequently completed in about 74 seconds |
+| Replacement incident preparation | Fresh private Perf/Event queries, SRE connectivity and the exact-target Review plan passed. An initial Fault call stopped before submission because the latest guest event was older than the three-minute limit; missing freshness is not waived to get a demonstration running |
 | Cleanup and recreation | Teardown removed the original fixture, external grants and owned SRE configuration, restored the original shared settings, and succeeded again on repetition. Subsequent failed-provisioning fixtures were also removed before recreation; historical success does not count as readiness for a new owner |
 | Complete incident | A fired disk alert, automatic SRE investigation, operator-script recovery and SRE resolution are not yet accepted as verified |
 
@@ -137,6 +140,11 @@ private workspace. It records exact workspace-scoped Log Analytics Reader
 assignments for the Arc and alert identities before creating them. Teardown
 checks assignment identity, scope, role and ownership description before removal.
 Reuse of the existing DCE for real Windows Perf and Event ingestion was verified.
+An existing Microsoft AMA extension is verified rather than redeployed, so a
+policy-installed agent is not removed or unnecessarily updated. If policy wins
+the initial installation race, only an exact AMA `HCRP409` deployment failure
+allows one retry, after successful extension provisioning and without another
+extension write. Other failures and unknown deployment outcomes remain errors.
 
 `Telemetry` queries the exact Arc resource from inside the private network using
 Arc managed identity. It rejects missing, stale, future-dated or foreign evidence.

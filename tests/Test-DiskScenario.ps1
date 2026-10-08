@@ -20,7 +20,7 @@ foreach ($entry in @('Assert-DiskFaultReadiness', 'Get-DiskAlert', 'Assert-DiskR
     $script:checks++
 }
 foreach ($name in @('Assert-Manifest', 'Get-OwnedGroup', 'Get-OwnedMachine', 'Remove-BootstrapAccess',
-    'Archive-DeletedDiskEvidence', 'Remove-MonitorAccess', 'Assert-FreshTelemetry', 'Assert-SafetyRecovery', 'Assert-DiskFaultReadiness', 'Assert-DiskRecoveryRun', 'Test-ArcConnection', 'Get-ArcCommand', 'Invoke-ArcCommand', 'Invoke-GuestController')) {
+    'Archive-DeletedDiskEvidence', 'Wait-DiskMonitorAgent', 'Invoke-DiskMonitorDeployment', 'Remove-MonitorAccess', 'Assert-FreshTelemetry', 'Assert-SafetyRecovery', 'Assert-DiskFaultReadiness', 'Assert-DiskRecoveryRun', 'Test-ArcConnection', 'Get-ArcCommand', 'Invoke-ArcCommand', 'Invoke-GuestController')) {
     $function = $ast.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -77,6 +77,70 @@ function Invoke-Azure {
     }
 }
 Assert-Manifest $state
+& {
+    $root = Split-Path $PSScriptRoot
+    $fixture = @{
+        creates=0; reads=0; sleeps=0; rejectFirst=$true; deploymentState='Failed'
+        code='HCRP409'; target="$arcId/extensions/AzureMonitorWindowsAgent"
+        publisher='Microsoft.Azure.Monitor'; phases=@('Creating', 'Succeeded'); existing=@()
+    }
+    function Start-Sleep { param($Seconds); $fixture.sleeps++ }
+    function Invoke-Azure {
+        param($Arguments, $TimeoutSeconds)
+        switch ("$($Arguments[0]) $($Arguments[1]) $($Arguments[2])") {
+            'deployment group create' {
+                $fixture.creates++
+                if ($fixture.rejectFirst -and $fixture.creates -eq 1) { throw 'Deployment failed' }
+                if (($fixture.creates -eq 2 -or $fixture.existing.Count) -and $Arguments[-1] -cne 'deployMonitoringAgent=false') {
+                    throw 'Settled policy extension would be rewritten by the retry'
+                }
+                return @{properties=@{provisioningState='Succeeded'}}
+            }
+            'deployment group show' { return @{properties=@{provisioningState=$fixture.deploymentState}} }
+            'deployment operation group' {
+                return @(@{properties=@{provisioningState='Failed';targetResource=@{id=$fixture.target}
+                    statusMessage=@{error=@{code=$fixture.code}}}})
+            }
+            'rest --method get' {
+                if ($Arguments[-1] -like '*/extensions?api-version=*') { return @{value=$fixture.existing} }
+                $phase=$fixture.phases[[Math]::Min($fixture.reads, $fixture.phases.Count-1)]
+                $fixture.reads++
+                return @{id="$arcId/extensions/AzureMonitorWindowsAgent";properties=@{
+                    publisher=$fixture.publisher;type='AzureMonitorWindowsAgent';provisioningState=$phase}}
+            }
+            default { throw 'Unexpected monitoring recovery operation' }
+        }
+    }
+    $result=Invoke-DiskMonitorDeployment -ParameterFile 'offline.json'
+    if ($result.properties.provisioningState -cne 'Succeeded' -or $fixture.creates -ne 2 -or
+        $fixture.reads -ne 2 -or $fixture.sleeps -ne 1) { throw 'AMA conflict was not settled before one deployment retry' }
+    $script:checks++
+    foreach ($invalid in @(@{key='code';value='AuthorizationFailed'}, @{key='target';value='foreign'},
+        @{key='publisher';value='foreign'}, @{key='phases';value=@('Failed')},
+        @{key='deploymentState';value='Running'})) {
+        $original=$fixture[$invalid.key]
+        $fixture[$invalid.key]=$invalid.value
+        $fixture.creates=0; $fixture.reads=0; $fixture.sleeps=0
+        Assert-Rejected { Invoke-DiskMonitorDeployment -ParameterFile 'offline.json' }
+        if ($fixture.creates -ne 1) { throw 'Unsafe monitoring deployment was retried' }
+        $script:checks++
+        $fixture[$invalid.key]=$original
+    }
+    $fixture.creates=0; $fixture.reads=0; $fixture.rejectFirst=$false
+    $null=Invoke-DiskMonitorDeployment -ParameterFile 'offline.json'
+    if ($fixture.creates -ne 1 -or $fixture.reads) { throw 'Successful monitoring deployment was retried' }
+    $script:checks++
+    $fixture.existing=@(@{id="$arcId/extensions/AzureMonitorWindowsAgent";properties=@{type='AzureMonitorWindowsAgent'}})
+    $fixture.creates=0; $fixture.reads=0
+    $null=Invoke-DiskMonitorDeployment -ParameterFile 'offline.json'
+    if ($fixture.creates -ne 1 -or $fixture.reads -ne 2) { throw 'Existing AMA was not verified before monitoring deployment' }
+    $script:checks++
+    $fixture.existing[0].id='foreign'
+    $fixture.creates=0
+    Assert-Rejected { Invoke-DiskMonitorDeployment -ParameterFile 'offline.json' }
+    if ($fixture.creates) { throw 'Monitoring adopted a foreign extension' }
+    $script:checks++
+}
 foreach($partial in @($null,@{},@{properties=@{}},@{properties=@{status='Disconnected'}})){
     if(Test-ArcConnection $partial){throw 'Partial/disconnected Arc resource passed readiness'}
     $script:checks++

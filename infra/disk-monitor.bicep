@@ -4,6 +4,8 @@ param tags object
 param workspaceId string
 param dceId string
 param enableAlert bool = false
+@description('False only after the lifecycle verifies an existing Microsoft monitoring extension.')
+param deployMonitoringAgent bool = true
 
 resource machine 'Microsoft.HybridCompute/machines@2024-07-10' existing = {
   name: 'disk-${environmentName}'
@@ -46,7 +48,7 @@ resource endpointAssociation 'Microsoft.Insights/dataCollectionRuleAssociations@
   scope: machine
   properties: { dataCollectionEndpointId: dceId }
 }
-resource ama 'Microsoft.HybridCompute/machines/extensions@2024-07-10' = {
+resource ama 'Microsoft.HybridCompute/machines/extensions@2024-07-10' = if (deployMonitoringAgent) {
   parent: machine
   name: 'AzureMonitorWindowsAgent'
   location: resourceGroup().location
