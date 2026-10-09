@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 
-from retailtx import storage
+from retailtx import fault, storage
 from retailtx.contracts import Lookup, Posting, Price, Sku
 from retailtx.db import connect
 from retailtx.http import setup
@@ -12,15 +12,16 @@ from retailtx.telemetry import configure
 
 def create_app() -> FastAPI:
     settings = Settings.from_env()
-    configure("erp-core")
-    app = FastAPI(title="RetailTx local ERP")
+    _ = settings.erp_dsn
+    configure("erp-core", settings)
+    app = FastAPI(title="RetailTx ERP")
     setup(app)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         with connect(settings.erp_dsn) as conn:
             conn.execute("SELECT transaction_id FROM ledger LIMIT 1")
-        return {"status": "healthy", "mode": "local"}
+        return {"status": "healthy", "mode": settings.mode}
 
     @app.get("/price/{sku}", response_model=Price)
     def price(sku: Sku) -> Price:
@@ -42,12 +43,6 @@ def create_app() -> FastAPI:
 
     @app.get("/worker")
     def worker() -> dict[str, Any]:
-        with connect(settings.erp_dsn) as conn:
-            row = conn.execute(
-                "SELECT *, coalesce(fault_until > clock_timestamp(), false) AS paused "
-                "FROM worker_control"
-            ).fetchone()
-        assert row is not None
-        return row
+        return fault.worker_status(settings.erp_dsn)
 
     return app

@@ -4,11 +4,11 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 
 from retailtx.contracts import Checkout, Conflict, EvidenceUnavailable, Posting, Price
-from retailtx.db import connect
+from retailtx.db import DatabaseTarget, connect
 from retailtx.telemetry import carrier, event
 
 
-def accepted(dsn: str, request: Checkout) -> Posting | None:
+def accepted(dsn: DatabaseTarget, request: Checkout) -> Posting | None:
     with connect(dsn) as conn:
         row = conn.execute(
             "SELECT request, posting FROM accepted_transactions WHERE transaction_id = %s",
@@ -21,7 +21,7 @@ def accepted(dsn: str, request: Checkout) -> Posting | None:
     return Posting.model_validate(row["posting"])
 
 
-def accept(dsn: str, request: Checkout, lookup: Callable[[], Price]) -> Posting:
+def accept(dsn: DatabaseTarget, request: Checkout, lookup: Callable[[], Price]) -> Posting:
     previous = accepted(dsn, request)
     if previous is not None:
         return previous
@@ -74,7 +74,7 @@ def accept(dsn: str, request: Checkout, lookup: Callable[[], Price]) -> Posting:
     return posting
 
 
-def post(dsn: str, posting: Posting) -> Posting:
+def post(dsn: DatabaseTarget, posting: Posting) -> Posting:
     with connect(dsn) as conn:
         conn.execute(
             """
@@ -99,7 +99,7 @@ def post(dsn: str, posting: Posting) -> Posting:
     return posting
 
 
-def ledger_lookup(dsn: str, ids: list[UUID]) -> list[Posting]:
+def ledger_lookup(dsn: DatabaseTarget, ids: list[UUID]) -> list[Posting]:
     with connect(dsn) as conn:
         rows = conn.execute(
             "SELECT posting FROM ledger WHERE transaction_id = ANY(%s)", (ids,)

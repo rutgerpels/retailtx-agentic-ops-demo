@@ -3,6 +3,7 @@ from typing import Any, TypedDict
 
 import httpx
 import psycopg
+from azure.core.exceptions import AzureError
 from psycopg.types.json import Jsonb
 from pydantic import TypeAdapter, ValidationError
 
@@ -15,7 +16,7 @@ from retailtx.contracts import (
     Posting,
     euros,
 )
-from retailtx.db import connect
+from retailtx.db import DatabaseTarget, connect
 from retailtx.telemetry import SpanKind, carrier, event, tracer
 
 INTERVAL_SECONDS = 5
@@ -130,7 +131,34 @@ def snapshot(
     )
 
 
-def reconcile(dsn: str, http: httpx.Client) -> dict[str, object]:
+def observe_freshness(result: dict[str, object]) -> None:
+    event("reconciliation.freshness", status=result["status"], error=result["error"])
+    current = result["current"]
+    if result["status"] != "fresh" or not isinstance(current, dict):
+        return
+    event("reconciliation.observed", **current)
+    for country in COUNTRIES:
+        buckets = [item for item in current["by_country_brand"] if item["country"] == country]
+        event(
+            "reconciliation.country",
+            country=country,
+            observed_at=current["observed_at"],
+            unposted_count=sum(item["unposted_count"] for item in buckets),
+            unposted_cents=sum(item["unposted_cents"] for item in buckets),
+        )
+
+
+def reconcile(dsn: DatabaseTarget, http: httpx.Client) -> dict[str, object]:
+    try:
+        result = _reconcile(dsn, http)
+    except (psycopg.Error, AzureError) as exc:
+        event("reconciliation.freshness", status="unknown", error=type(exc).__name__)
+        raise
+    observe_freshness(result)
+    return result
+
+
+def _reconcile(dsn: DatabaseTarget, http: httpx.Client) -> dict[str, object]:
     attempted = datetime.now(UTC)
     with tracer.start_as_current_span(
         "reconciliation",
@@ -141,7 +169,13 @@ def reconcile(dsn: str, http: httpx.Client) -> dict[str, object]:
         try:
             with connect(dsn) as conn:
                 report, _, _ = snapshot(conn, http)
-        except (httpx.HTTPError, ValidationError, ValueError, EvidenceUnavailable) as exc:
+        except (
+            httpx.HTTPError,
+            ValidationError,
+            ValueError,
+            EvidenceUnavailable,
+            psycopg.Error,
+        ) as exc:
             with connect(dsn) as conn:
                 conn.execute(
                     """
@@ -169,11 +203,10 @@ def reconcile(dsn: str, http: httpx.Client) -> dict[str, object]:
                     """,
                     (attempted, report["observed_at"], Jsonb(report)),
                 )
-            event("reconciliation.observed", **report)
     return status(dsn)
 
 
-def status(dsn: str) -> dict[str, object]:
+def status(dsn: DatabaseTarget) -> dict[str, object]:
     with connect(dsn) as conn:
         row = conn.execute("SELECT * FROM reconciliation").fetchone()
     if row is None:
@@ -201,7 +234,7 @@ def status(dsn: str) -> dict[str, object]:
     }
 
 
-def replay_unposted(dsn: str, http: httpx.Client) -> int:
+def replay_unposted(dsn: DatabaseTarget, http: httpx.Client) -> int:
     with connect(dsn) as conn:
         report, ids, confirmed_ids = snapshot(conn, http)
     # A posting after the observation can only cause a harmless duplicate delivery.

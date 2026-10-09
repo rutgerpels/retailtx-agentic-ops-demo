@@ -4,6 +4,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 from retailtx.contracts import PRICES, Checkout, Country, Posting, Sku, euros
+from retailtx.http import client
 from retailtx.settings import Settings
 from retailtx.telemetry import SpanKind, carrier, configure, event, tracer
 
@@ -49,9 +50,9 @@ def main() -> None:
         parser.error("--interval must be between 0 and 5 seconds")
     rows = dataset(args.seed, args.count)
     settings = Settings.from_env()
-    configure("pos-sim")
+    configure("pos-sim", settings)
     expected = sum(PRICES[row.sku] * row.quantity for row in rows)
-    with httpx.Client(base_url=settings.cap_url, timeout=5) as http:
+    with client(settings, settings.cap_url, timeout=5) as http:
         for row in rows:
             with tracer.start_as_current_span("pos.checkout", kind=SpanKind.CLIENT):
                 for attempt in range(3):
