@@ -123,6 +123,8 @@ def validate_request(request, config):
         keys |= {"runId", "actor", "startBeforeUtc", "durationSeconds", "canary"}
     elif action in ("repair", "reset"):
         keys |= {"runId", "actor"}
+        if action == "repair" and "expectedDeadlineUtc" in request:
+            keys.add("expectedDeadlineUtc")
     elif action not in ("configure", "status"):
         raise ValueError("Unsupported action")
     if set(request) != keys or request["ownerToken"] != config["ownerToken"]:
@@ -216,6 +218,14 @@ def execute(request, config, state):
                 raise ValueError("Repair/reset exact run mismatch")
         elif action == "repair" or request["runId"] != "00000000-0000-0000-0000-000000000000":
             raise ValueError("No matching fault to repair")
+        if "expectedDeadlineUtc" in request:
+            expected = datetime.fromisoformat(request["expectedDeadlineUtc"])
+            if (expected.tzinfo is None or expected.utcoffset().total_seconds() != 0 or
+                    marker["phase"] != "fault-active" or
+                    expected != datetime.fromisoformat(marker["deadlineUtc"]) or
+                    time.time() >= expected.timestamp() or marker["bootId"] != boot_id() or
+                    time.monotonic() >= marker["monotonicDeadlineSeconds"]):
+                raise ValueError("Approved repair window expired or fault already recovered")
         recover(state, request["actor"], action)
 
 
