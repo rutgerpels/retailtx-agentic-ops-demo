@@ -24,6 +24,12 @@ shorter presentation sequence: deployment/warm-up before the session, exact-run
 operator recovery promptly after SRE's proposal, independent verification and
 RCA, then automatic monitor clearance during the walkthrough. It changes no
 alert or safety settings and is not evidence of a shorter measured run.
+A fresh timing experiment stopped before fault injection because Arc-identity
+private workspace queries returned an authorization denial despite recorded
+grants. One bounded readiness retry also failed; the fixture and owned grants
+were removed and shared SRE settings restored. Effective private query access
+must be established before measuring this sequence. No runtime improvement
+was verified.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-09.
 **Scope:** reusable demo product, private infrastructure integration proof, and

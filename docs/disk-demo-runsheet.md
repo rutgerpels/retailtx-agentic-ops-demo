@@ -6,6 +6,12 @@ guest recovery and 28-30 minutes from fault-operation start to final clearance
 note. This runsheet reduces idle presentation time and avoidable operator delay;
 it does not establish faster Arc delivery, SRE reasoning or telemetry ingestion.
 
+The first attempt to measure this sequence on fresh `demo06` stopped before
+injection: private Arc-identity telemetry queries returned an access denial on
+initial readiness and one bounded retry despite the recorded grants being
+present. The fixture was removed and cleanup verified. No shorter incident was
+measured; see the [experiment record](disk-scenario.md#timing-experiment-blocked-before-injection-2026-10-09).
+
 Use the [disk lifecycle guide](disk-scenario.md) for installation, ownership,
 safety gates and teardown. The scenario is real capacity pressure on a disposable
 `R:` volume; IIS remains healthy. It is not a retail outage or autonomous repair.

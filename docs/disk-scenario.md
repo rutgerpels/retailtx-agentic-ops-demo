@@ -256,6 +256,36 @@ disk-owner tag were restored. Proof remains under ignored `.azure\demo05`.
 The reusable foundation remains intentionally retained and billable;
 historical telemetry and conversations are not claimed as erased.
 
+## Timing experiment blocked before injection, 2026-10-09
+
+A fresh `demo06` was provisioned to measure prompt operator recovery after
+SRE's real proposal and immediate verification, without changing alert, safety
+or permission settings. Three Arc probes, installation, Doctor and independent
+canary recovery passed. Monitor completed after the existing bounded
+policy-installed AMA preservation/retry path; Connect completed at 08:51:38 UTC.
+
+`Arm` then failed at the private Arc-identity Log Analytics query with
+`InsufficientAccessError`. Both recorded workspace grants were present on an
+independent scoped role-assignment read. One bounded readiness retry returned
+the same explicit access denial. This is not an unexplained command-delivery
+timeout: the guest command completed with an HTTP authorization error.
+Grant presence does not establish effective data-plane access, and the cause
+has not been established. No role was widened, token material exposed or
+readiness requirement bypassed.
+
+The alert remained disabled and no fault was injected. Consequently this
+attempt provides no fault/proposal/recovery timing and no evidence of improvement.
+Do not count it as a successful fresh incident cycle or a rehearsal.
+The prior 9-11-minute recoveries and 28-30-minute full flows remain the evidence.
+Resolve effective private query access on a fresh identity before another
+timing experiment; do not add automatic retries that conceal readiness failures.
+
+Owned `Down` completed at 09:01:44 UTC and repeat teardown at 09:02:18.
+Independent reads at 09:03:44 confirmed no fixture group or owned live resources,
+no recorded external grants or scenario SRE investigator/plan, and restored
+shared SRE settings. Raw failure, timing and teardown evidence remains under
+ignored `.azure\demo06`. The reusable foundation remains retained and billable.
+
 ## Lifecycle commands
 
 Use PowerShell 7.2+, Azure CLI and Bicep with the authorized subscription and the
