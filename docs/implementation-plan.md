@@ -348,18 +348,26 @@ traffic, or business recovery. The first live incident verified real HTTP 503,
 automatic alert/SRE investigation, an exact-run recommendation, operator-script
 HTTP 200 recovery about 5m21s after injection, fresh private recovery evidence,
 and an independent SRE recovery note. Ordinary and reboot watchdog safety also
-passed. Automatic alert clearance, teardown, repeatability and human rehearsal
-remain separate gates; this is not yet a customer-repeatable release.
+passed. Monitor cleared automatically about 16m21s after injection; the SRE
+incident record remained `new` with blocked acknowledgement. A distinct repeat
+recovered after an operator corrected stale-run SRE evidence; it is not
+uninterrupted repeatability acceptance. Owned teardown and independent grant
+absence passed. New activation-time/freshness instructions require fresh live
+acceptance; repeatability and human rehearsal remain separate gates.
 Autonomous Arc repair is deferred.
 
 The second target is a dedicated Azure Service Bus queue send-disablement with
 **fully autonomous SRE recovery**, not automated test approval presented as
 native autonomy. The [private broker slice](servicebus-scenario.md) implements
-infrastructure and a durable sender/receiver probe only. Arming, fault injection
-and SRE recovery remain blocked until a supported pre-execution boundary
-enforces the exact owned queue action; queue-scoped RBAC alone allows other
-property writes. No live broker fixture or SRE queue-write grant has been
-created. A separate fixed-action executor would be an explicit architecture
+private infrastructure, a durable sender/receiver probe, a separate fixed-action
+executor/deadline watchdog and a private Linux publishing/probe runner.
+Queue-scoped RBAC alone permits other property writes; the executor code and
+its exact authenticated caller/run/deadline checks are the proposed
+pre-execution boundary. Live provisioning began, including the private queue
+and executor-specific Entra grant; Linux provisioning authentication and Flex
+Consumption configuration failures currently block runtime acceptance.
+Arming, fault injection and autonomous recovery remain unverified. The SRE
+identity has no queue-management role; this is an explicit architecture
 addition, not an assumed native capability.
 
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action

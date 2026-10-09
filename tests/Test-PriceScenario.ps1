@@ -9,6 +9,25 @@ if ($errors) { throw ($errors -join "`n") }
 $checks = 0
 $endpoint = 'http://127.0.0.1:18081/price/basket-a/'
 
+& {
+    $state = @{
+        ownerToken='owned'; alertId='/owned-rule'; workspaceCustomerId='workspace'
+        priceEndpoint=$endpoint; priceEventSource='owned-source'
+    }
+    $arcId = '/owned-arc'
+    $EnvironmentName = 'demo01'
+    $FoundationEnvironment = 'foundation'
+    $subscription = 'subscription'
+    $instructions = Get-PriceSreInstructions -ClientId 'reader-client'
+    foreach ($required in @(
+        'record properties.essentials.startDateTime', 'no more than three minutes', 'at most 30 seconds',
+        "at or after this alert's startDateTime", 'report UNKNOWN without claiming recovery'
+    )) {
+        if (-not $instructions.Contains($required)) { throw "Missing current-incident evidence guard: $required" }
+        $script:checks++
+    }
+}
+
 $guestPath = Join-Path $PSScriptRoot '..\scripts\price\Invoke-PriceGuest.ps1'
 $guestErrors = $null
 $guestAst = [System.Management.Automation.Language.Parser]::ParseFile($guestPath, [ref]$null, [ref]$guestErrors)
@@ -46,6 +65,81 @@ function New-HealthyObservation {
         bootTime=$now.AddHours(-1).ToString('o')
         response=@{sku='basket-a';currency='EUR';unit_price_cents=199}
     }
+}
+
+& {
+    $ownerToken = [guid]::NewGuid().ToString()
+    $commandId = '/owned-arc/runCommands/price-status-' + ('a' * 32)
+    $marker = 'RETAILTX_GUEST_RESULT:' + [guid]::NewGuid().ToString()
+    $source = "if ((Get-Content 'C:\ProgramData\RetailTxDisk\owner.txt' -Raw).Trim() -cne '$ownerToken') { throw 'Owner mismatch' }`nWrite-Output '$marker'"
+    $request = @{properties=@{source=@{script=$source}}}
+    $receipt = @{id=$commandId;properties=@{source=@{script=$source};instanceView=@{
+        executionState='Succeeded';exitCode=0;error='';output="{} `n$marker"
+    }}}
+    Assert-PriceCommandRetirement -Command $receipt -Request $request -Receipt $receipt `
+        -CommandId $commandId -OwnerToken $ownerToken
+    $script:checks++
+    foreach ($mutation in @(
+        @{key='executionState';value='Running'}, @{key='exitCode';value=1},
+        @{key='error';value='guest failure'}, @{key='output';value='missing nonce'}
+    )) {
+        $bad = $receipt | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+        $bad.properties.instanceView[$mutation.key] = $mutation.value
+        Assert-Rejected {
+            Assert-PriceCommandRetirement -Command $bad -Request $request -Receipt $receipt `
+                -CommandId $commandId -OwnerToken $ownerToken
+        }
+    }
+    Assert-Rejected {
+        Assert-PriceCommandRetirement -Command $receipt -Request $request -Receipt $receipt `
+            -CommandId '/different-command' -OwnerToken $ownerToken
+    }
+    Assert-Rejected {
+        Assert-PriceCommandRetirement -Command $receipt -Request $request -Receipt $receipt `
+            -CommandId $commandId -OwnerToken ([guid]::NewGuid().ToString())
+    }
+    $arcId = '/owned-arc'
+    $arcApi = '2024-07-10'
+    $directory = $PSScriptRoot
+    $state = @{ownerToken=$ownerToken}
+    $script:deletedCommand = $false
+    $script:retirementSaved = $false
+    $script:listReads = 0
+    function Invoke-Azure {
+        param([string[]]$Arguments)
+        if ($Arguments[2] -ceq 'delete') {
+            if ($Arguments[4] -cne "https://management.azure.com${commandId}?api-version=$arcApi") {
+                throw 'Deletion targeted a different command.'
+            }
+            $script:deletedCommand = $true
+            return @{}
+        }
+        $script:listReads++
+        $items = @(1..19 | ForEach-Object { @{id="/unowned/$_"} })
+        if (-not $script:deletedCommand) { $items += @{id=$commandId} }
+        return @{value=$items}
+    }
+    function Get-ChildItem {
+        param($LiteralPath,$Filter,[switch]$File)
+        [pscustomobject]@{Name='price-status-' + ('a' * 32) + '.request.json';FullName='mock-request';LastWriteTime=[DateTime]::UtcNow}
+    }
+    function Test-Path { param($LiteralPath,$PathType) return $true }
+    function Get-Content {
+        param($LiteralPath,[switch]$Raw)
+        if ($LiteralPath -ceq 'mock-request') { return ($request | ConvertTo-Json -Depth 10) }
+        return ($receipt | ConvertTo-Json -Depth 10)
+    }
+    function Get-ArcCommand { param($CommandId) return $receipt }
+    function Save-RetailState { param($Value,$Path) $script:retirementSaved = $true }
+    Remove-CompletedPriceCommand
+    if (-not $script:deletedCommand -or -not $script:retirementSaved -or $script:listReads -ne 2) {
+        throw 'Completed command retirement did not verify deletion and preserve its receipt.'
+    }
+    $script:checks++
+    $script:deletedCommand = $false
+    $receipt.properties.instanceView.executionState = 'Running'
+    Assert-Rejected { Remove-CompletedPriceCommand }
+    if ($script:deletedCommand) { throw 'Pending Arc command was deleted.' }
 }
 
 & {

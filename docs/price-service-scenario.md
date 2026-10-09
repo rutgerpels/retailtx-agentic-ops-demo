@@ -4,7 +4,9 @@
 watchdog recovery to HTTP 200 with the seeded JSON and healthy baseline.
 Reboot safety also passed after reconciling delayed Arc output. A real incident
 reached an SRE recommendation, operator-script recovery and independent SRE
-recovery diagnosis. Automatic alert clearance remains open.** The existing operator-first
+recovery diagnosis and automatic Monitor clearance. A distinct repeat also
+recovered, but required correction of SRE's stale-run diagnosis. Owned teardown
+and repeated teardown passed; customer-repeatable acceptance remains open.** The existing operator-first
 disk scenario remains the verified incident proof. Do not describe the new flow
 as a verified retail checkout recovery.
 
@@ -63,6 +65,11 @@ At 14:05:24 UTC, SRE independently refreshed private same-run telemetry and the
 exact nested alert, then wrote a recovery incident note in the existing thread.
 It correctly reported recovered guest health separately from the still-fired
 Monitor alert.
+Monitor subsequently cleared automatically at 14:11:07 UTC: approximately
+sixteen minutes twenty-one seconds after fault injection and eleven minutes
+after guest recovery. No alert write was used. The SRE incident record still
+reported `new` with blocked acknowledgement; automatic Monitor resolution is
+not evidence that the SRE incident record was closed.
 Automatic alert acknowledgement reported `AuthorizationBlocked`; investigation
 and recommendation nevertheless completed. No acknowledgement permissions
 were broadened and no alert was force-cleared.
@@ -74,8 +81,53 @@ waits up to five minutes for private healthy evidence, retrying only reads of
 valid fresh same-run fault events. Unknown, stale, mismatched or malformed
 evidence and unexpected recovery actors still fail explicitly. One query may
 also incur the existing bounded Arc observer latency.
-Full incident acceptance remains open. Delayed command-result visibility is not evidence that
+Customer-repeatable acceptance remains open. Delayed command-result visibility is not evidence that
 the guest action did not run.
+The first repeat attempt was explicitly rejected by Azure with `HCRP400`:
+the host already retained twenty-five Run Command resources. Activity Log
+confirmed that exact rejected request, and a fresh read showed the previous
+healthy run remained on the guest. This was a provider capacity rejection, not
+an ambiguous guest timeout. Its reserved run ID was preserved as rejected and
+never replayed; the prior cleared-alert anchor was restored from archived
+evidence before reserving a different run.
+
+Price command dispatch now checks retained command capacity. Near the limit,
+it retires only a completed owned command whose saved request, saved receipt
+and live receipt agree on source, resource ID, successful exit and terminal
+nonce. Local proof files remain intact. Commands without complete proof,
+pending commands and foreign commands are not deleted. Deletion is separately
+verified with a bounded wait; failure blocks new dispatch. This uses the
+documented [Arc Run Command lifecycle](https://learn.microsoft.com/en-us/azure/azure-arc/servers/run-command),
+not a new guest transport.
+
+The distinct repeat fault was injected at 14:29:33 UTC. Its automatically
+created SRE thread initially interpreted the previous run's healthy evidence
+as current recovery. No wrong-run repair was executed. An operator follow-up
+required a new private query, which confirmed the current stopped pool and
+yielded the correct run-specific recommendation at 14:39:14 UTC. The operator
+ran that exact command once; guest recovery at 14:40:52 UTC was verified by
+fresh private telemetry and an independent SRE recovery note at 14:43:52 UTC.
+The recovery verifier completed its guest-to-private readback without replay.
+Monitor cleared automatically at 14:52:00 UTC: approximately twenty-two
+minutes twenty-seven seconds after injection, versus eleven minutes twenty
+seconds to guest repair. The SRE incident record still remained `new`.
+The rejected attempt, reservation reconciliation and stale-run correction
+do not count as an uninterrupted customer acceptance cycle.
+
+The recommendation instructions now require the exact nested alert's
+`properties.essentials.startDateTime`, current UTC freshness within three
+minutes, and current-run evidence observed at or after that activation.
+Historical healthy events and agent memory cannot establish this incident's
+recovery or supply its command's run ID. Missing current evidence permits
+bounded read-only retries, then an explicit unknown result. These instruction
+guards have offline contract coverage; a fresh live run using them is still
+required, and prompt instructions are not an execution security boundary.
+The existing controller's exact-run checks remain the repair boundary.
+
+Demo14 was removed after both Monitor alerts had cleared. Repeated `Down`
+was idempotent; independent subscription reads found no owned pricing resource
+group, Arc/alert/bootstrap grants, or group-scoped grants. The retained
+foundation was not deleted.
 Host regression checks also exercise the actual
 recovery-operation wiring and JSON timestamp deserialization, not just its
 callback helper.
@@ -237,8 +289,9 @@ telemetry verification. Live installation and healthy local endpoint checks
 passed on demo14, with accepted safety-canary HTTP failure and independent
 watchdog recovery. Real incident injection, private DCR ingestion, automatic
 alert/SRE investigation, exact-run recommendation and operator-script repair
-and independent SRE recovery diagnosis have been observed once. Automatic alert clearance,
-repeatability and human rehearsal remain open. The full customer-demo lifecycle
+and independent SRE recovery diagnosis plus automatic Monitor clearance have
+been observed once. Owned teardown, repeatability and human rehearsal remain
+open. The full customer-demo lifecycle
 is not accepted.
 
 The persisted JSON watchdog state is also tested on actual Windows PowerShell

@@ -57,8 +57,11 @@ and operator-run recovery. This synthetic dependency does not
 prove customer checkout, store impact, or ERP recovery. Its first live incident
 now reached automatic SRE investigation, an exact-run recommendation and
 operator-script guest recovery in about 5m21s after injection, followed by an
-independent SRE recovery note. Automatic alert clearance, repeatability and
-human rehearsal are still separate gates.
+independent SRE recovery note. Automatic Monitor clearance took about 16m21s
+after injection. A distinct repeat recovered after an operator corrected SRE's
+stale-run diagnosis; it is not uninterrupted repeatability acceptance. The
+fixture and its external grants were removed. Human rehearsal remains open.
+Guest repair, SRE diagnosis and alert clearance are measured separately.
 
 ## Recommended direction
 

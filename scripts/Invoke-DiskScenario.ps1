@@ -212,6 +212,9 @@ function Invoke-ArcCommand {
     )
     $machine = Get-OwnedMachine -Arc
     if (-not (Test-ArcConnection $machine)) { throw 'Arc host is not Connected.' }
+    if ($state.ContainsKey('workloadScenario') -and $state.workloadScenario -ceq 'price-service') {
+        Remove-CompletedPriceCommand
+    }
     $nonce = [guid]::NewGuid().ToString()
     $marker = "RETAILTX_GUEST_RESULT:$nonce"
     $commandName = "$Purpose-$([guid]::NewGuid().ToString('N'))"
