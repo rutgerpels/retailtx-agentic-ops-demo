@@ -10,7 +10,7 @@ Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
 The user-directed [operator-first Windows Arc disk scenario](disk-scenario.md)
-has completed real faults on two fresh fixtures, alert-triggered SRE investigation/proposal,
+has completed real faults on three fresh fixtures, alert-triggered SRE investigation/proposal,
 supplied operator-script recovery, private recovery verification, automatic
 monitor-condition clearance and final SRE note. Same-fixture reset produced
 distinct alerts and threads after prior clearance; the second incident needed
@@ -24,12 +24,17 @@ shorter presentation sequence: deployment/warm-up before the session, exact-run
 operator recovery promptly after SRE's proposal, independent verification and
 RCA, then automatic monitor clearance during the walkthrough. It changes no
 alert or safety settings and is not evidence of a shorter measured run.
-A fresh timing experiment stopped before fault injection because Arc-identity
-private workspace queries returned an authorization denial despite recorded
-grants. One bounded readiness retry also failed; the fixture and owned grants
-were removed and shared SRE settings restored. Effective private query access
-must be established before measuring this sequence. No runtime improvement
-was verified.
+A first fresh timing experiment stopped before fault injection because
+Arc-identity private queries returned an authorization denial despite recorded
+grants. The subsequent experiment passed readiness only after a bounded retry.
+Prompt execution restored the guest 9 minutes 17 seconds after fault request,
+but conflicting private Perf/Event evidence delayed verified SRE recovery/RCA
+to about 18 minutes; the full flow still took 28 minutes. Earlier workspace grant placement and no-write
+reconciliation now avoid needless assignment updates; future investigator
+instructions bind the configured identity and exact nested alert-read path.
+These are reliability corrections, not a verified fix for authorization
+propagation or counter delay. No shorter verified demo was established, and the
+twelve-minute end-to-end gate remains unmet.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-09.
 **Scope:** reusable demo product, private infrastructure integration proof, and
@@ -324,7 +329,7 @@ complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Establish repeatability and presentation timing for the operator-first disk incident | Two fresh fixtures completed actual pressure, alert-triggered SRE investigation, exact-run operator recovery, private verification, automatic monitor-condition clearance and an SRE note. A same-fixture reset also produced a distinct run, alert and thread after prior clearance. The fresh repeat recovered about nine minutes after fault request; the reset recovered in about eleven minutes. Full flows took about 28 and 30 minutes, including counter convergence and the documented stateful-alert clearance interval. The reset required one read-only SRE verification retry after an internal error. Read-only exact-incident snapshots and a previous-alert-resolution reset gate are implemented. Earlier Arc stalls remain unexplained; acknowledgment remained AuthorizationBlocked. These are three incidents across two fresh fixtures, not three fresh cycles. Complete the remaining fresh cycles and human rehearsal before recommending a primary live demo; retain the native-action fallback |
+| Establish repeatability and presentation timing for the operator-first disk incident | Three fresh fixtures and one same-fixture reset completed actual pressure, automatic SRE investigation/proposal, exact-run operator recovery, private verification, automatic clearance and a final note. The latest prompt-recovery experiment restored the guest in 9m17s but counter/event disagreement delayed verified SRE recovery/RCA to about 18 minutes; the full flow remained 28 minutes. It required a readiness retry and correction of SRE's alert-read scope/API and identity fallback. The earlier reset needed one verification retry after an internal error. Early workspace-grant placement, no-write grant reconciliation, exact read-only incident snapshots and the prior-alert-resolution reset gate are implemented; their presence does not prove a faster uninterrupted cycle. Earlier Arc stalls and telemetry delay remain unexplained; acknowledgment remained AuthorizationBlocked. Four incidents across three fresh fixtures are not three uninterrupted customer acceptance cycles. The twelve-minute gate and human rehearsal remain open; retain the native-action fallback |
 | Evaluate automatic guest recovery only after the operator-led incident is reliable | Separate Arc delivery, SRE tool support, approval boundaries and host/platform configuration. Native VM start remains the narrower verified fallback, not proof of guest remediation |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |

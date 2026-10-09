@@ -12,6 +12,15 @@ initial readiness and one bounded retry despite the recorded grants being
 present. The fixture was removed and cleanup verified. No shorter incident was
 measured; see the [experiment record](disk-scenario.md#timing-experiment-blocked-before-injection-2026-10-09).
 
+The subsequent [measured `demo07` run](disk-scenario.md#measured-prompt-recovery-incident-2026-10-09)
+recovered the guest 9 minutes 17 seconds after fault request, but private counter
+convergence delayed SRE's verified recovery/RCA to about 18 minutes. Prompt
+operator execution did **not** establish a faster verified live segment.
+The full fault-operation-to-final-clearance-note flow remained 28 minutes.
+Readiness also required a bounded retry after an access denial. Earlier grant
+placement, no-write reconciliation and more precise investigation instructions
+are implemented, not a proven fix for ingestion delay or the twelve-minute gate.
+
 Use the [disk lifecycle guide](disk-scenario.md) for installation, ownership,
 safety gates and teardown. The scenario is real capacity pressure on a disposable
 `R:` volume; IIS remains healthy. It is not a retail outage or autonomous repair.
@@ -80,9 +89,13 @@ alert-created SRE thread, substituting the verified current run:
 > phase, recovery actor, IIS status and watchdog freshness. Require at least 75%
 > free capacity and fresh healthy evidence; report stale or conflicting data
 > explicitly. Give a concise recovery summary and RCA when those checks pass.
-> Separately read the exact alert: if still Fired, report monitor clearance
-> pending, not resolved. Do not execute recovery, acknowledge, close or change
-> permissions.
+> The actual alert resource ID from `Incident` is `<verified-nested-alert-id>`.
+> Validate it against the exact Arc host, then read that ID using
+> `2019-05-05-preview` and only the configured action identity. If still Fired,
+> report monitor clearance pending, not resolved. If inaccessible or malformed,
+> report the read failure; never fabricate an ID or switch identities.
+> Keep the note in this thread. Do not execute recovery, acknowledge, close or
+> change permissions.
 
 Once Monitor reports `Resolved`, ask SRE in the same thread to independently
 verify that exact alert and fresh private recovery evidence, then record the

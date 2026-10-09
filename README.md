@@ -29,11 +29,11 @@ a start-only role on one isolated VM. These were not human rehearsals. This is
 hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
 An [operator-first Windows Arc disk incident](docs/disk-scenario.md) has now
-worked on two fresh fixtures, including a same-fixture reset and second incident:
+worked on three fresh fixtures, including a same-fixture reset and second incident:
 `R:` reached 8% free, Azure Monitor alerted, SRE automatically
 investigated and proposed the supplied script, and operator recovery restored
 99.43% free. SRE verified private telemetry and wrote the incident note; the
-monitor condition cleared automatically. The second incident needed one
+monitor condition cleared automatically. The reset incident needed one
 read-only SRE verification retry after an internal error. Acknowledgment remained
 permission-blocked.
 IIS stayed healthy and the OS disk was never filled. Earlier Arc command stalls
@@ -44,7 +44,12 @@ the foundation remains intentionally retained and billable.
 
 The [disk demo runsheet](docs/disk-demo-runsheet.md) proposes using the walkthrough
 for alert waits and later clearance, without changing safety or claiming a
-verified shorter runtime.
+verified shorter runtime. A fresh prompt-recovery experiment restored the guest
+in 9 minutes 17 seconds, but delayed private counter convergence pushed SRE's
+verified recovery/RCA to about 18 minutes after fault request. Earlier workspace
+grant placement, no-write grant reconciliation and precise SRE alert-read
+instructions are implemented. The full flow still took 28 minutes; a faster
+verified demo is unproven.
 
 ## Recommended direction
 

@@ -7,6 +7,20 @@ $null = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$n
 if ($errors) { throw ($errors -join "`n") }
 . $path
 $checks = 0
+$source = Get-Content -LiteralPath $path -Raw
+foreach ($required in @(
+    'Use only that configured client identity.',
+    'never switch to another identity or widen permissions.',
+    'the exact prefix $arcId/providers/Microsoft.AlertsManagement/alerts/ and a GUID suffix.',
+    'GET https://management.azure.com<validated-alertId>?api-version=2019-05-05-preview',
+    'Missing or invalid alertId means the alert read is unavailable.',
+    'Do not acknowledge, close or force resolution.',
+    'Report guest recovery and monitor clearance separately.',
+    'Record the incident note in this existing thread; do not search for an external note target.'
+)) {
+    if (-not $source.Contains($required)) { throw "Investigation instruction boundary missing: $required" }
+    $checks++
+}
 function Assert-Rejected {
     param([scriptblock]$Action)
     $rejected = $false
