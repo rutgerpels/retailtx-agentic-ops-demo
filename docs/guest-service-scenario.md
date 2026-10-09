@@ -124,15 +124,24 @@ guest script from already having run. A hook returning allow can also override
 global policy denies. Do not use prompt instructions or a post-execution hook
 as the privileged repair boundary.
 
-The safe native-only next candidate is a **separately owned SRE agent** with
-isolated identity and tested global deny-by-default command policies, including
-alternate terminal/Python routes and hook overrides. That is a new lifecycle
-and capability gate, not a reason to alter this shared agent. Before any live
-fault, demonstrate allowed exact repair, denied altered script/target, visible
-approval and unchanged denies after cleanup. If those controls cannot be
-enforced, retain the verified recommendation/operator experience rather than
-introduce another custom executor. Alert plumbing and autonomous mode remain
-deferred until this decision is resolved.
+An isolated SRE agent alone does **not** resolve this boundary. Further review
+of the documented precedence found that a blanket global deny also rejects
+the intended repair, even when an exact allow exists. An exact allow without
+that deny leaves unmatched commands subject to default behavior, not hard
+rejection. No exception/default-deny mechanism is documented that meets the
+proposed exact-repair-only acceptance gate. This is a documentation-based
+no-go, not a live negative-policy test or proof about undocumented controls.
+
+Step 1 is blocked on an explicit permission-boundary decision tracked in
+[the owner decision](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/10).
+A supervised Review-mode proof on one disposable VM is a narrower feasible
+experiment: inspect and approve the exact command, verify identity/recovery,
+and remove its grant afterward. It demonstrates approved execution, **not**
+service-only permissions or autonomous safety. Do not infer authorization for
+that weaker boundary from approval of this documentation. If strict fixed-action
+enforcement remains required, retain the recommendation/operator experience
+until a suitable supported control is verified, without introducing another
+custom executor. Alert plumbing and autonomous mode remain deferred.
 
 ## Current evidence
 

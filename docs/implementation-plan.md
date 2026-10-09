@@ -423,10 +423,14 @@ but **no safe guest-write grant for the retained shared agent**. Its live global
 tool-policy lists were empty and remained unchanged. Argument-aware deny rules
 are global only; thread/custom-agent allows cannot supply a deny-by-default
 boundary and can bypass Review approval. Documented hooks run after tool use,
-not before a privileged script executes. A separately owned SRE agent with
-tested global command restrictions is the next native-only candidate; do not
-grant arbitrary guest scripting on the shared agent or build another executor.
-No direct SRE guest action or new fault was exercised in this gate.
+not before a privileged script executes. Follow-up review found that an isolated
+agent alone cannot establish the proposed boundary: blanket deny overrides the
+exact repair allow, and exact allow alone is not deny-by-default. An explicit
+[owner decision](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/10)
+is required before substituting a supervised Review-mode, VM-scoped execution
+proof for strict fixed-command enforcement. Do not grant arbitrary guest scripting
+on the shared agent or build another executor. No direct SRE guest action or new
+fault was exercised in this gate.
 
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
