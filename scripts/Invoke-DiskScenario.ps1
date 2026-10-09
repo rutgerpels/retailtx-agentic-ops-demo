@@ -7,6 +7,8 @@ Uses the retained foundation's private subnet and Arc private-link scope.
 Native Compute Run Command is provisioning-only. Probe uses HybridCompute
 after Azure guest management is disabled. No disk fault is injected by Up.
 Temporary onboarding permissions are removed after connection or by Down.
+Up records and grants the exact Arc identity workspace query access before
+guest probes and safety preparation; effective access is still checked by Arm.
 .PARAMETER Operation
 Up, Status, Probe, Install, Reconcile, Doctor, SafetyTest, Recover, Monitor,
 Telemetry, Incident, Connect, Disconnect, Arm, Fault or Down.
@@ -393,6 +395,18 @@ function Set-MonitorAccess {
     }
     $role = $state.monitorRoles[$Target]
     if ($role.principalId -ine $PrincipalId.ToString()) { throw 'Monitoring identity changed; do not adopt new permissions.' }
+    $assignments = @(Invoke-Azure @('role', 'assignment', 'list', '--scope', $state.workspaceId,
+        '--fill-principal-name', 'false', '--fill-role-definition-name', 'false'))
+    $existing = @($assignments | Where-Object id -IEQ $role.id)
+    if ($existing.Count) {
+        if ($existing.Count -ne 1 -or $existing[0].scope -ine $state.workspaceId -or
+            $existing[0].principalId -ine $role.principalId -or
+            $existing[0].roleDefinitionId -notlike '*/73c42c96-874c-492b-b04d-ab87d138a893' -or
+            $existing[0].description -cne "retailtx:disk:$($state.ownerToken):$Target") {
+            throw 'Recorded monitoring grant differs from the exact owned workspace permission.'
+        }
+        return
+    }
     $null = Invoke-Azure @('role', 'assignment', 'create', '--name', $role.name,
         '--assignee-object-id', $role.principalId, '--assignee-principal-type', 'ServicePrincipal',
         '--role', '73c42c96-874c-492b-b04d-ab87d138a893', '--scope', $state.workspaceId,
@@ -645,7 +659,8 @@ try {
             if ($matches.Count -eq 1) { $arc = $matches[0] }
         } while (-not (Test-ArcConnection $arc) -and [DateTimeOffset]::UtcNow -lt $deadline)
         if (-not (Test-ArcConnection $arc)) { throw 'Arc bootstrap did not connect within ten minutes; no fault was injected.' }
-        $null = Get-OwnedMachine -Arc
+        $machine = Get-OwnedMachine -Arc
+        Set-MonitorAccess -Target arc -PrincipalId $machine.identity.principalId
         Remove-BootstrapAccess
         $state.phase = 'arc-connected'
         Save-State

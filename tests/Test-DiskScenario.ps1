@@ -20,7 +20,7 @@ foreach ($entry in @('Assert-DiskFaultReadiness', 'Get-DiskAlert', 'Assert-DiskR
     $script:checks++
 }
 foreach ($name in @('Assert-Manifest', 'Get-OwnedGroup', 'Get-OwnedMachine', 'Remove-BootstrapAccess',
-    'Archive-DeletedDiskEvidence', 'Wait-DiskMonitorAgent', 'Invoke-DiskMonitorDeployment', 'Remove-MonitorAccess', 'Assert-FreshTelemetry', 'Assert-SafetyRecovery', 'Assert-DiskFaultReadiness', 'Assert-DiskRecoveryRun', 'Test-ArcConnection', 'Get-ArcCommand', 'Invoke-ArcCommand', 'Invoke-GuestController')) {
+    'Archive-DeletedDiskEvidence', 'Wait-DiskMonitorAgent', 'Invoke-DiskMonitorDeployment', 'Set-MonitorAccess', 'Remove-MonitorAccess', 'Assert-FreshTelemetry', 'Assert-SafetyRecovery', 'Assert-DiskFaultReadiness', 'Assert-DiskRecoveryRun', 'Test-ArcConnection', 'Get-ArcCommand', 'Invoke-ArcCommand', 'Invoke-GuestController')) {
     $function = $ast.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
@@ -28,6 +28,54 @@ foreach ($name in @('Assert-Manifest', 'Get-OwnedGroup', 'Get-OwnedMachine', 'Re
     . ([scriptblock]::Create($function.Extent.Text))
 }
 $subscription = '11111111-1111-1111-1111-111111111111'
+& {
+    $state = @{ownerToken='owned';workspaceId="/subscriptions/$subscription/resourceGroups/foundation/providers/Microsoft.OperationalInsights/workspaces/test"}
+    $calls = [Collections.Generic.List[object]]::new()
+    $assignment = $null
+    function Save-State { $script:earlyGrantSaved = $true }
+    function Invoke-Azure {
+        param($Arguments)
+        if (-not $script:earlyGrantSaved) { throw 'Grant was not recorded before creation' }
+        if ($Arguments[2] -ceq 'list') {
+            if ($assignment) { return $assignment }
+            return @()
+        }
+        $calls.Add($Arguments)
+    }
+    $script:earlyGrantSaved = $false
+    $principal = [guid]'22222222-2222-2222-2222-222222222222'
+    Set-MonitorAccess -Target arc -PrincipalId $principal
+    $assignment = @{id=$state.monitorRoles.arc.id;scope=$state.workspaceId;principalId=$principal.ToString()
+        roleDefinitionId='/roles/73c42c96-874c-492b-b04d-ab87d138a893';description='retailtx:disk:owned:arc'}
+    Set-MonitorAccess -Target arc -PrincipalId $principal
+    if ($calls.Count -ne 1 -or
+        $calls[0][6] -cne $principal.ToString() -or
+        $calls[0][10] -cne '73c42c96-874c-492b-b04d-ab87d138a893' -or
+        $calls[0][12] -cne $state.workspaceId -or $calls[0][14] -cne 'retailtx:disk:owned:arc') {
+        throw 'Early grant changed identity, ownership, scope or idempotent assignment'
+    }
+    $script:checks++
+    Assert-Rejected { Set-MonitorAccess -Target arc -PrincipalId ([guid]::NewGuid()) }
+    if ($calls.Count -ne 1) { throw 'Identity drift created another grant' }
+    $script:checks++
+    foreach ($key in @('scope','principalId','roleDefinitionId','description')) {
+        $original = $assignment[$key]
+        $assignment[$key] = 'foreign'
+        Assert-Rejected { Set-MonitorAccess -Target arc -PrincipalId $principal }
+        $assignment[$key] = $original
+    }
+}
+$startupGrant = @($ast.FindAll({
+    param($node)
+    $node -is [System.Management.Automation.Language.CommandAst] -and
+        $node.Extent.Text -ceq 'Set-MonitorAccess -Target arc -PrincipalId $machine.identity.principalId'
+}, $true))
+if ($startupGrant.Count -ne 2 -or $startupGrant[0].Extent.StartLineNumber -ge
+    $startupGrant[1].Extent.StartLineNumber -or -not $ast.Extent.Text.Replace("`r`n", "`n").Contains(
+        "`$machine = Get-OwnedMachine -Arc`n        Set-MonitorAccess -Target arc -PrincipalId `$machine.identity.principalId")) {
+    throw 'Early Arc grant must follow exact ownership verification and remain reconciled by Monitor'
+}
+$script:checks++
 $EnvironmentName = 'demo03'
 $FoundationEnvironment = 'stage0'
 $groupName = 'rg-retailtx-disk-demo03-swedencentral'

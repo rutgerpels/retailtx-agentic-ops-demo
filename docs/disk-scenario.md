@@ -1,6 +1,6 @@
 # Windows Arc disk-capacity scenario
 
-**Status: operator-first incidents verified on two fresh fixtures, not
+**Status: operator-first incidents verified on three fresh fixtures, not
 customer-ready.** Fresh fixtures completed the following flow on 2026-10-08
 and 2026-10-09:
 
@@ -15,6 +15,10 @@ Automatic SRE guest remediation is a later, separate integration question.
 An operator script or safety watchdog is never recorded as an autonomous
 SRE fix. This sequencing supersedes the earlier recommendation to extend the
 native VM-start proof first; that proof remains a verified fallback.
+
+The [operator demo runsheet](disk-demo-runsheet.md) separates a proposed live
+recovery segment from later monitor clearance and prepares exact-run operator
+verification. It changes no alert or safety behavior and has not been rehearsed.
 
 ## Scenario and safeguards
 
@@ -252,6 +256,97 @@ disk-owner tag were restored. Proof remains under ignored `.azure\demo05`.
 The reusable foundation remains intentionally retained and billable;
 historical telemetry and conversations are not claimed as erased.
 
+## Timing experiment blocked before injection, 2026-10-09
+
+A fresh `demo06` was provisioned to measure prompt operator recovery after
+SRE's real proposal and immediate verification, without changing alert, safety
+or permission settings. Three Arc probes, installation, Doctor and independent
+canary recovery passed. Monitor completed after the existing bounded
+policy-installed AMA preservation/retry path; Connect completed at 08:51:38 UTC.
+
+`Arm` then failed at the private Arc-identity Log Analytics query with
+`InsufficientAccessError`. Both recorded workspace grants were present on an
+independent scoped role-assignment read. One bounded readiness retry returned
+the same explicit access denial. This is not an unexplained command-delivery
+timeout: the guest command completed with an HTTP authorization error.
+Grant presence does not establish effective data-plane access, and the cause
+has not been established. No role was widened, token material exposed or
+readiness requirement bypassed.
+
+The alert remained disabled and no fault was injected. Consequently this
+attempt provides no fault/proposal/recovery timing and no evidence of improvement.
+Do not count it as a successful fresh incident cycle or a rehearsal.
+The prior 9-11-minute recoveries and 28-30-minute full flows remain the evidence.
+Resolve effective private query access on a fresh identity before another
+timing experiment; do not add automatic retries that conceal readiness failures.
+
+Owned `Down` completed at 09:01:44 UTC and repeat teardown at 09:02:18.
+Independent reads at 09:03:44 confirmed no fixture group or owned live resources,
+no recorded external grants or scenario SRE investigator/plan, and restored
+shared SRE settings. Raw failure, timing and teardown evidence remains under
+ignored `.azure\demo06`. The reusable foundation remains retained and billable.
+
+## Measured prompt-recovery incident, 2026-10-09
+
+Fresh `demo07` tested prompt operator execution and immediate SRE verification,
+not a human rehearsal. The unchanged Arc workspace grant was created during
+`Up` at 09:17:14 UTC. However, `Monitor` rewrote that same assignment at 09:28:10;
+initial `Arm` still returned `InsufficientAccessError`. A later bounded readiness
+retry succeeded before injection. Assignment propagation is a possible
+explanation, not an established root cause. This was not uninterrupted readiness.
+
+| Milestone | UTC and evidence |
+| --- | --- |
+| Fault operation and request | Operation started 09:37:42; request recorded 09:38:47 |
+| Actual pressure | 09:39:55, approximately 8% free on disposable `R:`, IIS 200 |
+| Alert and automatic SRE thread | Alert 09:43:57; thread 09:44:21 |
+| Exact-run proposal | 09:45:31, backed by fresh low-capacity Perf and owned watchdog evidence |
+| Operator command and recovery | Command started 09:46:27; actual recovery 09:48:04, 99.43% free, actor `operator-script`; command returned 09:48:32 |
+| Conflicting private observations | Healthy same-run events arrived while fresh Perf still reported 7.994115% through 09:52:07; a separate observer also rejected stale evidence |
+| Independent private convergence | Captured Perf 99.435998% at 09:54:37 with healthy same-run watchdog, IIS 200 and private query address |
+| SRE verified recovery/RCA | 09:56:45, after independently reading healthy Perf and the same-run operator-recovery watchdog; Monitor clearance still pending |
+| Automatic clearance and final note | Exact alert resolved 10:04:19; SRE independently verified fresh healthy evidence and automatic resolution in its final addendum at 10:05:45 |
+
+Fault request to guest recovery was **9 minutes 17 seconds**; fault-operation
+start to recovery was **10 minutes 22 seconds**. Execution began 56 seconds after
+the proposal, but guest recovery still followed 1 minute 37 seconds after command
+start. Operator preparation cannot eliminate that lifecycle/Arc execution time.
+The captured healthy Perf sample followed guest recovery by 6 minutes 34 seconds;
+SRE's verified recovery/RCA came approximately **18 minutes after fault request**.
+The counter/event discrepancy was not silently accepted or treated as a
+successful four-minute verification. Its underlying cause is not established.
+This does **not** demonstrate a faster verified incident or meet the twelve-minute
+end-to-end gate.
+Fault-operation start to final clearance note was **28 minutes 3 seconds**,
+still within the prior 28-30-minute range rather than a material improvement.
+Acknowledgment remained `AuthorizationBlocked` and alert state `New`; automatic
+monitor resolution is not acknowledgment or closure.
+
+SRE also guessed unsupported alert APIs and a subscription-scoped individual
+alert path, then attempted an unsuccessful read with its system identity.
+Operator correction to the exact nested Arc alert ID and
+`2019-05-05-preview` succeeded using the original configured action identity.
+The future `Connect` instructions now prohibit identity switching, provide that
+exact validated read shape, distinguish guest recovery from monitor clearance
+and keep the note in the existing thread. These instruction changes were not
+applied to the already running investigator and do not replace scoped RBAC.
+No permissions were expanded, guest mutations delegated or alert closure forced.
+
+`Set-MonitorAccess` now validates and reuses the exact owned assignment without
+rewriting it. A live read-only reconciliation of `demo07` verified no write
+attempts and unchanged `updatedOn`; offline tests cover grant creation,
+ownership/identity drift rejection and early placement in `Up`. The no-rewrite
+change was introduced **after** this fixture's `Monitor`, so a complete fresh
+`Up` through `Monitor` with both changes is not yet proven.
+
+Owned teardown completed at 10:11:36 UTC and repeat teardown at 10:11:51.
+Independent reads at 10:12:22 confirmed the fixture group and all owned live
+resources absent, recorded workspace/private-link grants absent, scenario SRE
+investigator/plan absent, and exact shared SRE settings restored.
+Measured same-run evidence, raw thread, conflicting samples and teardown proof
+remain under ignored `.azure\demo07`; the reusable foundation remains retained
+and billable.
+
 ## Lifecycle commands
 
 Use PowerShell 7.2+, Azure CLI and Bicep with the authorized subscription and the
@@ -301,6 +396,17 @@ configure monitoring and inspect real evidence:
 .\scripts\Invoke-DiskScenario.ps1 Monitor -SubscriptionId $subscription -EnvironmentName $environment
 .\scripts\Invoke-DiskScenario.ps1 Telemetry -SubscriptionId $subscription -EnvironmentName $environment
 ```
+
+`Up` now records and grants the exact connected Arc principal workspace-scoped
+Log Analytics Reader access before probes, installation and safety preparation.
+This gives the unchanged permission more lead time before its first query.
+`Monitor` reuses that exact recorded assignment and rejects identity drift;
+the alert identity's grant remains tied to its monitoring deployment.
+Effective private access is still required by `Arm` and `Fault`; assignment
+presence is not a readiness substitute. Microsoft documents that
+[role-assignment changes can take up to ten minutes to take effect](https://learn.microsoft.com/azure/role-based-access-control/troubleshooting#role-assignment-changes-are-not-being-detected).
+Earlier assignment is a mitigation to validate, not a proven diagnosis of the
+`demo06` failure. Owned `Down` removes the grant even if monitoring never ran.
 
 `Monitor` leaves the static alert **disabled**. It collects the `R:` free-space
 counter and structured Windows events through AMA, the foundation DCE and

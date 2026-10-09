@@ -10,7 +10,7 @@ Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
 The user-directed [operator-first Windows Arc disk scenario](disk-scenario.md)
-has completed real faults on two fresh fixtures, alert-triggered SRE investigation/proposal,
+has completed real faults on three fresh fixtures, alert-triggered SRE investigation/proposal,
 supplied operator-script recovery, private recovery verification, automatic
 monitor-condition clearance and final SRE note. Same-fixture reset produced
 distinct alerts and threads after prior clearance; the second incident needed
@@ -19,6 +19,22 @@ remained permission-blocked, and post-recovery verification used follow-up messa
 Earlier Arc command stalls remain unexplained; repeatability, presentation
 timing and human rehearsal are open. Automatic SRE-to-Arc execution is a later
 gate, not a prerequisite for this milestone.
+The [operator demo runsheet](disk-demo-runsheet.md) now prepares the proposed
+shorter presentation sequence: deployment/warm-up before the session, exact-run
+operator recovery promptly after SRE's proposal, independent verification and
+RCA, then automatic monitor clearance during the walkthrough. It changes no
+alert or safety settings and is not evidence of a shorter measured run.
+A first fresh timing experiment stopped before fault injection because
+Arc-identity private queries returned an authorization denial despite recorded
+grants. The subsequent experiment passed readiness only after a bounded retry.
+Prompt execution restored the guest 9 minutes 17 seconds after fault request,
+but conflicting private Perf/Event evidence delayed verified SRE recovery/RCA
+to about 18 minutes; the full flow still took 28 minutes. Earlier workspace grant placement and no-write
+reconciliation now avoid needless assignment updates; future investigator
+instructions bind the configured identity and exact nested alert-read path.
+These are reliability corrections, not a verified fix for authorization
+propagation or counter delay. No shorter verified demo was established, and the
+twelve-minute end-to-end gate remains unmet.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-09.
 **Scope:** reusable demo product, private infrastructure integration proof, and
@@ -313,13 +329,85 @@ complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Establish repeatability and presentation timing for the operator-first disk incident | Two fresh fixtures completed actual pressure, alert-triggered SRE investigation, exact-run operator recovery, private verification, automatic monitor-condition clearance and an SRE note. A same-fixture reset also produced a distinct run, alert and thread after prior clearance. The fresh repeat recovered about nine minutes after fault request; the reset recovered in about eleven minutes. Full flows took about 28 and 30 minutes, including counter convergence and the documented stateful-alert clearance interval. The reset required one read-only SRE verification retry after an internal error. Read-only exact-incident snapshots and a previous-alert-resolution reset gate are implemented. Earlier Arc stalls remain unexplained; acknowledgment remained AuthorizationBlocked. These are three incidents across two fresh fixtures, not three fresh cycles. Complete the remaining fresh cycles and human rehearsal before recommending a primary live demo; retain the native-action fallback |
+| Establish repeatability and presentation timing for the operator-first disk incident | Three fresh fixtures and one same-fixture reset completed actual pressure, automatic SRE investigation/proposal, exact-run operator recovery, private verification, automatic clearance and a final note. The latest prompt-recovery experiment restored the guest in 9m17s but counter/event disagreement delayed verified SRE recovery/RCA to about 18 minutes; the full flow remained 28 minutes. It required a readiness retry and correction of SRE's alert-read scope/API and identity fallback. The earlier reset needed one verification retry after an internal error. Early workspace-grant placement, no-write grant reconciliation, exact read-only incident snapshots and the prior-alert-resolution reset gate are implemented; their presence does not prove a faster uninterrupted cycle. Earlier Arc stalls and telemetry delay remain unexplained; acknowledgment remained AuthorizationBlocked. Four incidents across three fresh fixtures are not three uninterrupted customer acceptance cycles. The twelve-minute gate and human rehearsal remain open; retain the native-action fallback |
 | Evaluate automatic guest recovery only after the operator-led incident is reliable | Separate Arc delivery, SRE tool support, approval boundaries and host/platform configuration. Native VM start remains the narrower verified fallback, not proof of guest remediation |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |
 | Rehearse the verified disk investigation/recovery/RCA flow and settle the acknowledgment boundary | The first proof used post-recovery follow-up messages and left alertState New despite monitorCondition Resolved. Prove a clear human-operated presentation without claiming autonomous guest healing or requiring the deferred full application topology |
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
 | Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
+
+### Scenario direction agreed on 2026-10-09
+
+Prioritize an ERP price-service interruption with real checkout failure/recovery
+evidence, then a dedicated Service Bus queue send-disablement comparison that
+removes Arc guest-command delivery from the recovery path. Both remain proposed,
+not implemented or timed. Preserve bounded faults, independent cleanup, private
+telemetry and fixed-action permissions. Changing a fault alone does not remove
+log-alert clearance or evidence-ingestion delays; measure verified business
+recovery/RCA and automatic Monitor clearance separately without silently
+replacing the full-flow acceptance gate.
+
+### Parked third scenario: GitHub-reported incident to SRE recommendation
+
+**Status: brainstormed and parked by user direction; do not implement now.**
+This extends incident intake, not the agent's remediation authority. It is
+independent of the faster-fault experiments above and must not delay them.
+
+| Backlog field | Proposed value |
+| --- | --- |
+| Title | Investigate a GitHub-reported retail incident and recommend a fix |
+| Agile type | Feature; a prerequisite Spike verifies supported GitHub intake and response |
+| Description | An operator reports a synthetic retail symptom in a private GitHub issue. SRE automatically picks it up through a verified integration, correlates bounded private evidence and returns an actionable recommendation without executing a fix |
+| Priority | Deferred behind the agreed faster incident scenarios; numerical WSJF rank pending |
+| Rationale | Demonstrate human-reported incident intake even when Monitor has not alerted, using the same evidence and guardrails rather than another autonomous-action demonstration |
+| Dependencies | Verified product support for issue-triggered intake and response, private allowlisted repository, least-privilege GitHub/telemetry access, incident correlation and approved runbooks |
+| Estimate | Not estimated until the integration Spike establishes the supported path |
+| Labels | Proposed: `feature`, `scenario`, `deferred`, `needs-po-review`; not applied to a GitHub item |
+| Definition of Ready | Not Ready: parked, integration unverified, estimate and WSJF inputs missing |
+
+**Storyboard:** an operator raises an issue such as "checkout price lookups are
+failing while the ERP host is reachable." The verified intake automatically
+creates or associates an SRE investigation, preserving the exact issue URL and
+source provenance. SRE checks the relevant private request/dependency evidence
+and approved runbook, then posts the observed condition, evidence timestamps,
+likely cause, confidence, recommended fixed recovery action and verification
+steps. Missing or conflicting evidence produces an explicit uncertainty or
+clarification request, not an invented cause. Posting the recommendation is the
+only intended write; the issue remains open for human disposition.
+
+Acceptance criteria for the future implementation:
+
+- Given an eligible issue in the allowlisted private repository, when it is
+  raised, then SRE picks it up automatically without manually starting a thread,
+  and preserves the issue-to-investigation link.
+- Given private evidence for the reported symptom, when SRE investigates, then
+  its recommendation cites fresh scoped evidence and an approved recovery
+  procedure without executing remediation.
+- Given missing, stale or conflicting evidence, when SRE responds, then it
+  states the limitation and requests the specific information needed.
+- Given an existing alert-driven investigation or duplicate issue delivery,
+  when intake runs, then it correlates/links the report without duplicate
+  investigations or repeated recommendations.
+- Given malicious instructions in an issue or comment, when SRE reads them,
+  then they remain untrusted incident data: no arbitrary commands, identity
+  switching, permission expansion or disclosure of secrets/customer context.
+- Given the scenario is reset or removed, when its lifecycle runs, then owned
+  trigger configuration and grants are disabled/removed, and existing
+  repository or shared-agent configuration is preserved.
+
+**Assumptions and integration gate:** exact Azure SRE Agent GitHub trigger,
+authentication, filtering and comment-response support have not been verified.
+Prefer supported native integration if confirmed; do not assume a connector,
+webhook or polling service exists. A manual issue-URL handoff can illustrate
+recommendation quality but does not pass automatic-intake acceptance. Do not
+build a custom bridge merely to complete this story without an explicit decision.
+WSJF inputs are unknown; keep `needs-po-review` rather than fabricate a score.
+
+The existing autonomous proof is narrowly scoped native Azure VM start with
+automated test authorization, not autonomous Arc/application repair. This
+future scenario intentionally demonstrates recommendations instead; it requires
+no new guest-write permissions, code-fixing agent or automatically generated PR.
 
 ## 6. Deployment, reset, and teardown are product features
 
