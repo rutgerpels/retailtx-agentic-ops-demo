@@ -9,7 +9,7 @@ after Azure guest management is disabled. No disk fault is injected by Up.
 Temporary onboarding permissions are removed after connection or by Down.
 .PARAMETER Operation
 Up, Status, Probe, Install, Reconcile, Doctor, SafetyTest, Recover, Monitor,
-Telemetry, Connect, Disconnect, Arm, Fault or Down.
+Telemetry, Incident, Connect, Disconnect, Arm, Fault or Down.
 Reconcile verifies the intended installed controller and fresh healthy guest
 state after an uncertain installation; it never resubmits installation.
 Monitor configures collection and a disabled alert; Telemetry requires real,
@@ -20,6 +20,8 @@ Disconnect restores only the recorded SRE changes and leaves the guest intact.
 Arm requires healthy private telemetry and an independent safety proof.
 Fault injects real R: pressure for at most twenty minutes; never replay an
 uncertain request. Recover requires its exact run ID.
+Incident saves one read-only snapshot of current-fault alert details and its
+linked SRE incident. It neither runs guest commands nor acknowledges alerts.
 Failed bootstrap is intentionally not replayed: Down
 and recreate instead of layering recovery transports onto an unknown guest.
 .PARAMETER SubscriptionId
@@ -40,7 +42,7 @@ Owned state or real command evidence; never a simulated incident result.
 #>
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
 param(
-    [Parameter(Mandatory, Position = 0)][ValidateSet('Up', 'Status', 'Probe', 'Install', 'Reconcile', 'Doctor', 'SafetyTest', 'Recover', 'Monitor', 'Telemetry', 'Connect', 'Disconnect', 'Arm', 'Fault', 'Down')][string]$Operation,
+    [Parameter(Mandatory, Position = 0)][ValidateSet('Up', 'Status', 'Probe', 'Install', 'Reconcile', 'Doctor', 'SafetyTest', 'Recover', 'Monitor', 'Telemetry', 'Incident', 'Connect', 'Disconnect', 'Arm', 'Fault', 'Down')][string]$Operation,
     [Parameter(Mandatory)][guid]$SubscriptionId,
     [string]$EnvironmentName = 'demo03',
     [string]$FoundationEnvironment = 'stage0',
@@ -677,6 +679,10 @@ try {
         $state
     } elseif ($Operation -eq 'Telemetry') {
         Get-PrivateTelemetry
+    } elseif ($Operation -eq 'Incident') {
+        $null = Get-OwnedMachine -Arc
+        $null = Get-DiskAlert
+        Get-DiskIncident
     } elseif ($Operation -eq 'Connect') {
         $null = Get-OwnedMachine -Arc
         if (-not $state.ContainsKey('alertId') -or $state.alertEnabled) {
@@ -712,8 +718,10 @@ try {
         } else {
             if ($state.phase -cne 'armed' -or $alert.properties.enabled -ne $true) { throw 'Arm the verified alert/Review plan before injection.' }
             Assert-DiskSreArmed
+            Assert-DiskIncidentReset
             $faultId = [guid]::NewGuid()
             $state.activeRunId = $faultId.ToString()
+            $state.faultRunId = $faultId.ToString()
             $state.phase = 'fault-requested'
             $state.faultRequestedAt = [DateTimeOffset]::UtcNow.ToString('o')
             Save-State

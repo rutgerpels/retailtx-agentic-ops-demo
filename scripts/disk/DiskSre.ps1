@@ -1,4 +1,100 @@
 # Dot-sourced by Invoke-DiskScenario.ps1 inside its owned lifecycle lease.
+function Assert-DiskIncidentReset {
+    if (-not $state.ContainsKey('faultRequestedAt')) { return }
+    $previous = Get-DiskIncident
+    if ($previous.monitorCondition -cne 'resolved') {
+        throw 'The previous fault has not demonstrably cleared its alert; wait for resolution before another injection.'
+    }
+}
+function Get-DiskIncident {
+    if (-not $state.ContainsKey('faultRequestedAt') -or -not $state.ContainsKey('faultRunId') -or
+        $state.faultRunId -cne $state['activeRunId']) {
+        throw 'Incident observation requires a recorded fault, not a safety canary or readiness thread.'
+    }
+    $runId = [guid]::Parse($state.activeRunId).ToString()
+    # JSON may already contain DateTime values; reparsing localized strings can swap month/day.
+    $faultAt = [DateTimeOffset]$state.faultRequestedAt
+    $now = [DateTimeOffset]::UtcNow
+    if ($faultAt -gt $now -or $faultAt -lt $now.AddDays(-1)) {
+        throw 'Incident discovery requires a fault in the last day.'
+    }
+    $configuration = Get-DiskSreState
+    if (-not $configuration -or $configuration.phase -cne 'armed') { throw 'No owned armed SRE configuration exists.' }
+    $connection = Get-DiskSreConnection
+    Assert-DiskSreSharedSettings $connection.resource $configuration
+    $list = Invoke-Azure @('rest', '--method', 'get', '--url',
+        "https://management.azure.com/subscriptions/$subscription/providers/Microsoft.AlertsManagement/alerts?api-version=2019-03-01&targetResource=$([uri]::EscapeDataString($arcId))&timeRange=1d&pageCount=100")
+    $now = [DateTimeOffset]::UtcNow
+    if (-not $list.ContainsKey('value') -or $list['nextLink'] -or @($list.value).Count -gt 100) {
+        throw 'Incident discovery is incomplete; refusing to infer absence or resolution.'
+    }
+    $matches = @(
+        foreach ($candidate in $list.value) {
+            $essentials = $candidate.properties.essentials
+            if ($essentials.targetResource -ine $arcId) { throw 'Alert discovery returned a different target.' }
+            if ($essentials.alertRule -ine $state.alertId) { continue }
+            if (-not $essentials.startDateTime) { throw 'Alert activation timestamp is missing.' }
+            $startedAt = [DateTimeOffset]$essentials.startDateTime
+            if ($startedAt -gt $now.AddSeconds(30)) { throw 'Alert activation timestamp is future-dated.' }
+            if ($startedAt -ge $faultAt) { $candidate }
+        }
+    )
+    if ($matches.Count -gt 1) { throw 'Multiple current-fault alerts are ambiguous; inspect them without choosing a winner.' }
+    $alert = $null
+    $incident = $null
+    $condition = 'awaiting'
+    if ($matches.Count -eq 1) {
+        $candidate = $matches[0]
+        $alertGuid = [guid]::Parse(($candidate.id -split '/')[-1]).ToString()
+        $expectedId = "$arcId/providers/Microsoft.AlertsManagement/alerts/$alertGuid"
+        if ($candidate.id -ine $expectedId) { throw 'Alert ID is outside the exact Arc resource.' }
+        $alert = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com${expectedId}?api-version=2019-05-05-preview")
+        $now = [DateTimeOffset]::UtcNow
+        $essentials = $alert.properties.essentials
+        if ($alert.id -ine $expectedId -or $essentials.targetResource -ine $arcId -or
+            $essentials.alertRule -ine $state.alertId -or -not $essentials.startDateTime -or
+            [DateTimeOffset]$essentials.startDateTime -lt $faultAt -or
+            [DateTimeOffset]$essentials.startDateTime -gt $now.AddSeconds(30) -or
+            $essentials.monitorCondition -cnotin @('Fired', 'Resolved')) {
+            throw 'Individual alert detail does not establish this fault and a known monitor condition.'
+        }
+        $condition = $essentials.monitorCondition.ToLowerInvariant()
+        if ($condition -ceq 'resolved' -and (-not $essentials.monitorConditionResolvedDateTime -or
+            [DateTimeOffset]$essentials.monitorConditionResolvedDateTime -lt [DateTimeOffset]$essentials.startDateTime -or
+            [DateTimeOffset]$essentials.monitorConditionResolvedDateTime -gt $now.AddSeconds(30))) {
+            throw 'Resolved alert lacks a valid resolution timestamp.'
+        }
+        # Azure Monitor's alert GUID is the incident key; do not guess by title or trust list thread metadata.
+        $incident = Invoke-DiskSreRequest $connection GET "/api/v2/incidentManagement/incidents?incidentId=$alertGuid" -AllowMissing
+        $now = [DateTimeOffset]::UtcNow
+        if ($incident -and ($incident.id -ine $alertGuid -or $incident.alertId -ine $expectedId -or
+            $incident.targetResourceId -ine $arcId -or
+            $incident.alertRuleResourceId -ine $state.alertId -or -not $incident.createdAt -or
+            [DateTimeOffset]$incident.createdAt -lt $faultAt -or
+            [DateTimeOffset]$incident.createdAt -gt $now.AddSeconds(30))) {
+            throw 'SRE incident detail is not linked to the exact current-fault alert.'
+        }
+        if ($incident -and $incident['threadId']) { $null = [guid]::Parse($incident['threadId']) }
+    }
+    $evidence = @{
+        schemaVersion = 1; observedAt = $now.ToString('o'); ownerToken = $state.ownerToken
+        arcId = $arcId; runId = $runId; faultRequestedAt = $faultAt.ToUniversalTime().ToString('o')
+        monitorCondition = $condition; azureAlert = $alert; sreIncident = $incident
+        discoveryComplete = $true
+    }
+    $fileName = "incident-$runId-$($now.ToString('yyyyMMdd-HHmmssfff'))-$([guid]::NewGuid().ToString('N')).json"
+    Save-RetailState $evidence (Join-Path $directory $fileName)
+    return @{
+        runId = $runId; observedAt = $evidence.observedAt; monitorCondition = $condition; evidenceFile = $fileName
+        alertId = if ($alert) { $alert.id } else { $null }
+        alertState = if ($alert) { $alert.properties.essentials.alertState } else { $null }
+        resolvedAt = if ($alert) { $alert.properties.essentials['monitorConditionResolvedDateTime'] } else { $null }
+        threadId = if ($incident) { $incident['threadId'] } else { $null }
+        acknowledgementState = if ($incident) { $incident['acknowledgementState'] } else { $null }
+        incidentStatus = if ($incident) { $incident['status'] } else { $null }
+    }
+}
 function Get-DiskSreConnection {
     $foundation = Get-Content -LiteralPath (Join-Path $root ".azure\$FoundationEnvironment\retailtx-state.json") -Raw |
         ConvertFrom-Json -AsHashtable
