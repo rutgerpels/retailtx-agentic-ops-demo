@@ -427,10 +427,23 @@ not before a privileged script executes. Follow-up review found that an isolated
 agent alone cannot establish the proposed boundary: blanket deny overrides the
 exact repair allow, and exact allow alone is not deny-by-default. An explicit
 [owner decision](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/10)
-is required before substituting a supervised Review-mode, VM-scoped execution
-proof for strict fixed-command enforcement. Do not grant arbitrary guest scripting
-on the shared agent or build another executor. No direct SRE guest action or new
-fault was exercised in this gate.
+was resolved explicitly by the user: the next demo is supervised Review-mode
+execution on one disposable native VM, with a human approving the proposed
+command before any SRE guest execution. VM-scoped privileged scripting is
+accepted for that proof, not claimed to be service-only enforced. Use an isolated
+agent/action identity and remove the grant afterward; do not broaden the shared
+agent or add another executor. **2026-10-09: the `demo23` fixture passed this
+gate.** SRE proposed the exact repair command; a human approver verified it
+byte-for-byte against the portal's pending card and clicked Approve before any
+execution. Guest evidence (`recoveredBy`/`recoveryReason`), an independent
+Azure Activity Log query (single `correlationId` across `Started` ->
+`Accepted` -> `Succeeded`) and the approver's own verification all confirm
+exactly one gated invocation. See
+[guest-service-scenario.md](guest-service-scenario.md#human-approved-repair-evidence-demo23)
+for the full reconciliation, including a known tooling gap: the adapter's Read
+operation does not yet expose a structured pending-approval state, so
+operators must watch the SRE portal/chat UI itself during the approval step.
+Arc remains recommendation/operator repair, with alert intake and autonomy deferred.
 
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or

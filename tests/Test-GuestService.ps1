@@ -9,8 +9,12 @@ $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $root 'scripts\Invoke-GuestService.ps1'), [ref]$null, [ref]$errors)
 if ($errors) { throw ($errors -join "`n") }
 foreach ($name in @('Assert-ExactHash', 'Assert-GuestManifest', 'Get-RetainedGuestIdentity', 'Assert-GuestReader',
+    'Get-OwnedGuestActionRole', 'Get-GuestSubnetDelegationServiceName',
+    'Assert-GuestExecutionAgent', 'Assert-GuestExecutionNetwork',
+    'Assert-GuestExecutionAssignmentsForTeardown', 'Remove-GuestExecutionRoleAssignments', 'Remove-GuestExecutionRole',
     'Get-OwnedGroup', 'Assert-GuestTeardownInventory', 'Get-OwnedVm', 'Assert-GuestNetwork',
-    'Get-PowerState', 'Add-GuestJournal', 'ConvertFrom-GuestJson', 'ConvertFrom-GuestResult',
+    'Get-PowerState', 'Add-GuestJournal', 'Get-GuestBaseDeploymentParameters', 'Save-GuestTeardownUnknown',
+    'Invoke-GuestGroupDeletion', 'ConvertFrom-GuestJson', 'ConvertFrom-GuestResult',
     'Assert-GuestCommandEvidence', 'Invoke-GuestCommand', 'Get-GuestStatus')) {
     $node = $ast.Find({
         param($candidate)
@@ -37,6 +41,7 @@ $script:state = @{
     schemaVersion = 1; profile = 'guest-service'; subscriptionId = $subscription; tenantId = $account.tenantId
     environmentName = $EnvironmentName; location = $location; groupId = $groupId; vmId = $vmId
     ownerToken = '33333333-3333-3333-3333-333333333333'; sourceHashes = @{ 'worker.py' = 'a' * 64 }
+    expiresAt = [DateTimeOffset]::UtcNow.AddHours(4).ToString('o')
     journal = @(); pendingCommand = $null; currentFault = $null
     phase = 'ready'; agentPrincipalId = '66666666-6666-6666-6666-666666666666'
     agentId = "/subscriptions/$subscription/resourceGroups/foundation/providers/Microsoft.App/agents/sre-fixture"
@@ -44,8 +49,42 @@ $script:state = @{
 }
 $script:agent = @{ properties = @{ actionConfiguration = @{ mode = 'Review'; identity = $script:state.agentIdentityId } } }
 $script:identity = @{ id = $script:state.agentIdentityId; principalId = $script:state.agentPrincipalId; tenantId = $account.tenantId }
+$script:state.retainedAgentPrincipalId = $script:state.agentPrincipalId
+$baseParameters = Get-GuestBaseDeploymentParameters -AdminSshPublicKey 'ssh-ed25519 test-key'
+if ($baseParameters.agentPrincipalId.value -ine $script:state.retainedAgentPrincipalId) {
+    throw 'Default-mode base deployment did not bind Reader to the retained foundation identity.'
+}
+$script:checks++
+$script:state.schemaVersion = 2
+$script:state.withSreExecution = $true
+$script:state.agentPrincipalId = $null
+$baseParameters = Get-GuestBaseDeploymentParameters -AdminSshPublicKey 'ssh-ed25519 test-key'
+if ($baseParameters.agentPrincipalId.value -ine $script:state.retainedAgentPrincipalId) {
+    throw 'Opt-in base deployment did not bind Reader to the retained foundation identity.'
+}
+$script:checks++
+$script:state.schemaVersion = 1
+$script:state.Remove('withSreExecution')
+$script:state.agentPrincipalId = $script:state.retainedAgentPrincipalId
 $readerRole = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7"
 $script:assignments = @(@{ scope = $groupId; principalId = $script:state.agentPrincipalId; roleDefinitionId = $readerRole })
+$script:executionRole = $null
+$script:executionAgent = $null
+$script:executionIdentity = $null
+$script:executionIdentityUnavailable = $false
+$script:executionAssignments = @()
+$script:executionSystemAssignments = @()
+$script:executionAdminAssignments = @()
+$script:executionRoleAssignments = @()
+$script:executionVnet = $null
+$script:executionSubnet = $null
+$script:executionNat = $null
+$script:executionPip = $null
+$script:executionRoleDeleted = $false
+$script:executionDeleteCalls = 0
+$script:groupExistsResponses = @()
+$script:groupDeleteArguments = @()
+$script:groupDeleteFails = $false
 $script:inventory = @()
 $script:extensions = @()
 $tags = @{ demo = 'retailtx'; environmentId = $EnvironmentName; profile = 'guest-service'
@@ -106,22 +145,93 @@ function New-RawResult {
 function Invoke-Azure {
     param([string[]]$Arguments, [int]$TimeoutSeconds)
     switch ($Arguments[0..([Math]::Min(2, $Arguments.Count - 1))] -join ' ') {
-        'group exists --name' { return $true }
+        'group exists --name' {
+            if ($script:groupExistsResponses.Count -gt 0) {
+                $response = $script:groupExistsResponses[0]
+                $script:groupExistsResponses = @($script:groupExistsResponses | Select-Object -Skip 1)
+                return $response
+            }
+            return $true
+        }
         'group show --name' { return $script:group }
+        'group delete --name' {
+            $script:groupDeleteArguments = @($Arguments)
+            if ($script:groupDeleteFails) { throw 'simulated Azure CLI submission failure' }
+            return $null
+        }
         'vm list --resource-group' { return $script:vm }
         'network nic show' { return $script:nic }
-        'network vnet subnet' { return $script:subnet }
+        'network vnet subnet' {
+            if ($script:state.ContainsKey('sreSubnetId') -and $script:state.sreSubnetId -and
+                $Arguments -contains '--ids' -and $Arguments -contains $script:state.sreSubnetId) { return $script:executionSubnet }
+            return $script:subnet
+        }
+        'network vnet show' { return $script:executionVnet }
+        'network nat gateway' {
+            if ($script:state.withSreExecution) { return $script:executionNat }
+            return $script:nat
+        }
+        'network public-ip show' {
+            if ($script:state.withSreExecution) { return $script:executionPip }
+            return $script:pip
+        }
         'network nsg show' { return $script:nsg }
         'network nat gateway' { return $script:nat }
         'network public-ip show' { return $script:pip }
-        'resource show --ids' { return $script:agent }
+        'resource show --ids' {
+            if ($script:state -and $script:state.ContainsKey('withSreExecution') -and
+                $script:state.withSreExecution -and $Arguments -contains $script:state.agentId) { return $script:executionAgent }
+            return $script:agent
+        }
         'resource list --resource-group' { return $script:inventory }
         'rest --method get' { return @{ value = $script:extensions } }
-        'identity show --ids' { return $script:identity }
+        'identity show --ids' {
+            if ($script:state -and $script:state.ContainsKey('withSreExecution') -and
+                $script:state.withSreExecution -and $Arguments -contains $script:state.agentIdentityId) {
+                if ($script:executionIdentityUnavailable) { throw 'Managed identity not found.' }
+                return $script:executionIdentity
+            }
+            return $script:identity
+        }
+        'role definition list' {
+            if ($script:executionRoleDeleted) { return @() }
+            return @($script:executionRole)
+        }
         'role assignment list' {
-            if ($Arguments -contains '--all' -or $Arguments -notcontains '--scope' -or
-                $Arguments -notcontains '--fill-principal-name') { throw 'Scoped Reader readback CLI syntax changed.' }
-            return $script:assignments
+            if ($Arguments -contains '--assignee-object-id') {
+                $index = [Array]::IndexOf($Arguments, '--assignee-object-id') + 1
+                if ($Arguments[$index] -ieq $script:state.agentPrincipalId) { return $script:executionAssignments }
+                if ($Arguments[$index] -ieq $script:state.systemPrincipalId) { return $script:executionSystemAssignments }
+            }
+            if ($Arguments -contains '--role') { return $script:executionRoleAssignments }
+            if ($Arguments -contains '--scope') {
+                $index = [Array]::IndexOf($Arguments, '--scope') + 1
+                if ($Arguments[$index] -ieq $script:state.agentId) { return $script:executionAdminAssignments }
+                if ($Arguments[$index] -ieq $groupId) {
+                    if ($Arguments -contains '--all' -or $Arguments -notcontains '--fill-principal-name') {
+                        throw 'Scoped Reader readback CLI syntax changed.'
+                    }
+                    return $script:assignments
+                }
+                if ($Arguments[$index] -ieq $vmId) { return @($script:executionAssignments | Where-Object { $_.scope -ieq $vmId }) }
+                if ($Arguments[$index] -ieq $script:state.sreSubnetId) { return @($script:executionAssignments | Where-Object { $_.scope -ieq $script:state.sreSubnetId }) }
+            }
+            throw "Unexpected role assignment query: $($Arguments -join ' ')"
+        }
+        'role assignment delete' {
+            $script:executionDeleteCalls++
+            $index = [Array]::IndexOf($Arguments, '--ids') + 1
+            $deleteId = $Arguments[$index]
+            $script:executionAssignments = @($script:executionAssignments | Where-Object id -INE $deleteId)
+            $script:executionSystemAssignments = @($script:executionSystemAssignments | Where-Object id -INE $deleteId)
+            $script:executionAdminAssignments = @($script:executionAdminAssignments | Where-Object id -INE $deleteId)
+            $script:executionRoleAssignments = @($script:executionRoleAssignments | Where-Object id -INE $deleteId)
+            $script:assignments = @($script:assignments | Where-Object id -INE $deleteId)
+            return $null
+        }
+        'role definition delete' {
+            $script:executionRoleDeleted = $true
+            return $null
         }
         'vm get-instance-view --ids' { return @{ instanceView = @{ statuses = @(@{ code = 'PowerState/running' }) } } }
         'vm run-command invoke' {
@@ -133,8 +243,12 @@ function Invoke-Azure {
         default { throw "Unexpected operation: $($Arguments -join ' ')" }
     }
 }
-Assert-GuestManifest
 $foundation = @{ outputs = @{ SRE_AGENT_ID = $script:state.agentId } }
+$savedState = $script:state
+$script:state = $null
+$null = Get-RetainedGuestIdentity $foundation
+$script:state = $savedState
+Assert-GuestManifest
 $null = Get-RetainedGuestIdentity $foundation
 Assert-GuestReader
 $script:checks++
@@ -340,6 +454,210 @@ try {
 } finally {
     Remove-Item -LiteralPath $directory -Recurse -Force
 }
+$script:state.schemaVersion = 2
+$script:state.withSreExecution = $true
+$script:state.retainedAgentId = $script:state.agentId
+$script:state.retainedAgentIdentityId = $script:state.agentIdentityId
+$script:state.retainedAgentPrincipalId = $script:state.agentPrincipalId
+$script:state.readerAssignmentId = "$groupId/providers/Microsoft.Authorization/roleAssignments/abababab-abab-abab-abab-abababababab"
+$script:state.agentId = "$groupId/providers/Microsoft.App/agents/sre-retailtx-guest-agent-$EnvironmentName"
+$script:state.agentIdentityId = "$groupId/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-retailtx-guest-agent-$EnvironmentName"
+$script:state.agentPrincipalId = '77777777-7777-7777-7777-777777777777'
+$script:state.actionClientId = '88888888-8888-8888-8888-888888888888'
+$script:state.systemPrincipalId = '99999999-9999-9999-9999-999999999999'
+$script:state.adminObjectId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+$script:state.actionRoleDefinitionName = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+$script:state.actionRoleDefinitionId = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/$($script:state.actionRoleDefinitionName)"
+$script:state.actionRoleAssignmentId = "$vmId/providers/Microsoft.Authorization/roleAssignments/cccccccc-cccc-cccc-cccc-cccccccccccc"
+$script:state.actionReaderAssignmentId = "$groupId/providers/Microsoft.Authorization/roleAssignments/dddddddd-dddd-dddd-dddd-dddddddddddd"
+$script:state.systemReaderAssignmentId = "$groupId/providers/Microsoft.Authorization/roleAssignments/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+$script:state.networkAssignmentId = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName/subnets/sre/providers/Microsoft.Authorization/roleAssignments/ffffffff-ffff-ffff-ffff-ffffffffffff"
+$script:state.adminAssignmentId = "$($script:state.agentId)/providers/Microsoft.Authorization/roleAssignments/12121212-1212-1212-1212-121212121212"
+$script:state.sreSubnetId = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName/subnets/sre"
+$script:state.guestVmId = $vmId
+$script:state.sreAdministratorRoleDefinitionId = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/e79298df-d852-4c6d-84f9-5d13249d1e55"
+$script:state.agentEndpoint = 'https://sre.example.test/'
+$readerRole = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/acdd72a7-3385-48ef-bd42-f606fba81ae7"
+$networkRole = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/4d97b98b-1d4f-4787-a291-c67834d212e7"
+$adminRole = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/e79298df-d852-4c6d-84f9-5d13249d1e55"
+$script:executionRole = @{
+    id = $script:state.actionRoleDefinitionId
+    roleType = 'CustomRole'
+    roleName = "RetailTx guest repair $EnvironmentName"
+    description = "RetailTx guest repair for environment $EnvironmentName; ownerToken=$($script:state.ownerToken)"
+    assignableScopes = @($groupId)
+    permissions = @(@{ actions = @('Microsoft.Compute/virtualMachines/runCommand/action')
+        notActions = @(); dataActions = @(); notDataActions = @() })
+}
+$script:executionIdentity = @{
+    id = $script:state.agentIdentityId; location = $location; tenantId = $account.tenantId
+    principalId = $script:state.agentPrincipalId; clientId = $script:state.actionClientId
+    tags = $tags.Clone()
+}
+$script:executionAgent = @{
+    id = $script:state.agentId; location = $location; tags = $tags.Clone()
+    identity = @{ principalId = $script:state.systemPrincipalId }
+    properties = @{
+        agentEndpoint = $script:state.agentEndpoint
+        actionConfiguration = @{ mode = 'Review'; accessLevel = 'Low'; identity = $script:state.agentIdentityId }
+        knowledgeGraphConfiguration = @{ identity = $script:state.agentIdentityId; managedResources = @($groupId) }
+        vnetConfiguration = @{ subnetResourceId = $script:state.sreSubnetId }
+        sandboxConfiguration = @{ egress = @{ mode = 'AzureVNet'; vnetConfiguration = @{ usePrivateDnsResolution = $true } } }
+    }
+}
+$agentReaderId = $script:state.actionReaderAssignmentId
+$systemReaderId = $script:state.systemReaderAssignmentId
+$actionRoleAssignment = @{ id = $script:state.actionRoleAssignmentId; scope = $vmId
+    principalId = $script:state.agentPrincipalId; roleDefinitionId = $script:state.actionRoleDefinitionId }
+$script:executionAssignments = @(
+    @{ id = $agentReaderId; scope = $groupId; principalId = $script:state.agentPrincipalId; roleDefinitionId = $readerRole }
+    $actionRoleAssignment
+    @{ id = $script:state.networkAssignmentId; scope = $script:state.sreSubnetId
+        principalId = $script:state.agentPrincipalId; roleDefinitionId = $networkRole }
+)
+$script:executionSystemAssignments = @(@{
+    id = $systemReaderId; scope = $groupId; principalId = $script:state.systemPrincipalId; roleDefinitionId = $readerRole
+})
+$script:executionAdminAssignments = @(@{
+    id = $script:state.adminAssignmentId; scope = $script:state.agentId
+    principalId = $script:state.adminObjectId; roleDefinitionId = $adminRole
+})
+$script:executionRoleAssignments = @($actionRoleAssignment)
+$script:assignments = @(
+    @{ id = $script:state.readerAssignmentId; scope = $groupId
+        principalId = $script:state.retainedAgentPrincipalId; roleDefinitionId = $readerRole }
+    @{ id = $script:state.actionReaderAssignmentId; scope = $groupId
+        principalId = $script:state.agentPrincipalId; roleDefinitionId = $readerRole }
+    @{ id = $script:state.systemReaderAssignmentId; scope = $groupId
+        principalId = $script:state.systemPrincipalId; roleDefinitionId = $readerRole }
+)
+$agentVnetId = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName"
+$agentNatId = "$groupId/providers/Microsoft.Network/natGateways/nat-retailtx-guest-agent-$EnvironmentName"
+$agentPipId = "$groupId/providers/Microsoft.Network/publicIPAddresses/pip-retailtx-guest-agent-$EnvironmentName-egress"
+$script:executionVnet = @{
+    id = $agentVnetId; location = $location; tags = $tags.Clone()
+    addressSpace = @{ addressPrefixes = @('10.90.0.0/24') }; virtualNetworkPeerings = @()
+}
+$script:executionSubnet = @{
+    id = $script:state.sreSubnetId; addressPrefix = '10.90.0.0/27'; defaultOutboundAccess = $false
+    delegations = @(@{ serviceName = 'Microsoft.App/environments'; actions = @() })
+    natGateway = @{ id = $agentNatId }
+}
+$script:executionNat = @{
+    id = $agentNatId; location = $location; tags = $tags.Clone(); sku = @{ name = 'Standard' }
+    idleTimeoutInMinutes = 4; publicIpAddresses = @(@{ id = $agentPipId })
+    subnets = @(@{ id = $script:state.sreSubnetId })
+}
+$script:executionPip = @{
+    id = $agentPipId; location = $location; tags = $tags.Clone(); sku = @{ name = 'Standard'; tier = 'Regional' }
+    publicIPAllocationMethod = 'Static'; publicIPAddressVersion = 'IPv4'; natGateway = @{ id = $agentNatId }
+}
+$teardownTestDirectory = Join-Path $root ".azure\guest-teardown-tests-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $teardownTestDirectory
+$statePath = Join-Path $teardownTestDirectory 'state.json'
+$completeAgentState = $script:state
+$partialReloadState = $completeAgentState.Clone()
+$partialReloadState.phase = 'provisioning'
+foreach ($field in @('agentPrincipalId', 'actionClientId', 'systemPrincipalId', 'agentEndpoint',
+    'adminObjectId', 'actionRoleAssignmentId', 'actionReaderAssignmentId', 'systemReaderAssignmentId',
+    'networkAssignmentId', 'adminAssignmentId', 'sreSubnetId', 'guestVmId', 'sreAdministratorRoleDefinitionId')) {
+    $partialReloadState[$field] = $null
+}
+Save-RetailState $partialReloadState $statePath
+$script:state = ConvertFrom-GuestJson (Get-Content -LiteralPath $statePath -Raw)
+Assert-GuestManifest
+$script:checks++
+$script:state.phase = 'configuring'
+Assert-Rejected { Assert-GuestManifest }
+$script:state = $completeAgentState
+Assert-GuestManifest
+Assert-GuestReader
+Assert-GuestExecutionAgent
+$script:checks++
+$script:executionSubnet.delegations = @(@{ properties = @{ serviceName = 'Microsoft.App/environments' } })
+Assert-GuestExecutionNetwork -SubnetId $script:state.sreSubnetId
+$script:checks++
+$script:executionSubnet.delegations = @(@{ serviceName = 'Microsoft.App/environments'; actions = @() })
+$script:executionSubnet.delegations[0].serviceName = 'Microsoft.App/other'
+Assert-Rejected { Assert-GuestExecutionNetwork -SubnetId $script:state.sreSubnetId }
+$script:executionSubnet.delegations = @(@{ serviceName = 'Microsoft.App/environments'; actions = @() })
+$script:executionAgent.properties.actionConfiguration.mode = 'Autonomous'
+Assert-Rejected { Assert-GuestExecutionAgent }
+$script:executionAgent.properties.actionConfiguration.mode = 'Review'
+$script:executionRole.permissions[0].actions += 'Microsoft.Compute/virtualMachines/start/action'
+Assert-Rejected { Get-OwnedGuestActionRole }
+$script:executionRole.permissions[0].actions = @('Microsoft.Compute/virtualMachines/runCommand/action')
+$script:executionAssignments += @{ id = 'foreign'; scope = $groupId; principalId = $script:state.agentPrincipalId
+    roleDefinitionId = '/subscriptions/foreign/providers/Microsoft.Authorization/roleDefinitions/Contributor' }
+Assert-Rejected { Assert-GuestExecutionAgent }
+$script:executionAssignments = @($script:executionAssignments[0..2])
+$script:executionVnet.virtualNetworkPeerings = @(@{ id = 'foreign-peering' })
+Assert-Rejected { Assert-GuestExecutionAgent }
+$script:executionVnet.virtualNetworkPeerings = @()
+$script:inventory = @(
+    @{ id = $script:state.agentIdentityId; type = 'Microsoft.ManagedIdentity/userAssignedIdentities'
+        location = $location; tags = $tags.Clone() }
+    @{ id = $script:state.agentId; type = 'Microsoft.App/agents'; location = $location; tags = $tags.Clone() }
+)
+Assert-GuestExecutionAssignmentsForTeardown
+$script:checks++
+$null = Remove-GuestExecutionRoleAssignments
+if ($script:state.teardownRoleAssignments.Count -ne 0 -or $script:executionAssignments.Count -ne 0 -or
+    $script:executionSystemAssignments.Count -ne 0 -or $script:executionAdminAssignments.Count -ne 0 -or
+    $script:assignments.Count -ne 0) { throw 'Exact fixture role assignments were not removed before teardown.' }
+$script:checks++
+$script:executionAssignments += @{ id = 'foreign'; scope = $groupId; principalId = $script:state.agentPrincipalId
+    roleDefinitionId = '/subscriptions/foreign/providers/Microsoft.Authorization/roleDefinitions/Owner' }
+Assert-Rejected { Assert-GuestExecutionAssignmentsForTeardown }
+$script:executionAssignments = @()
+$script:inventory = @()
+$script:executionRoleDeleted = $false
+$script:executionRoleAssignments = @($actionRoleAssignment)
+$beforeRoleDeletes = $script:executionDeleteCalls
+$null = Remove-GuestExecutionRole
+if (-not $script:executionRoleDeleted -or $script:executionDeleteCalls -ne ($beforeRoleDeletes + 1)) {
+    throw 'Owned role teardown did not remove the exact VM grant and custom role.'
+}
+$script:checks++
+$script:state.phase = 'deleting'
+$script:groupExistsResponses = @($true, $false)
+$script:groupDeleteArguments = @()
+Invoke-GuestGroupDeletion -TimeoutMinutes 1 -PollSeconds 0
+if ($script:groupDeleteArguments -notcontains '--no-wait' -or
+    ($script:state.ContainsKey('teardownStatus') -and $script:state.teardownStatus -eq 'unknown')) {
+    throw 'Group deletion did not use bounded asynchronous deletion or left a false unknown report.'
+}
+$script:checks++
+$script:groupDeleteFails = $true
+$script:groupExistsResponses = @($true)
+Assert-Rejected { Invoke-GuestGroupDeletion -TimeoutMinutes 1 -PollSeconds 0 }
+$persistedTeardownState = ConvertFrom-GuestJson (Get-Content -LiteralPath $statePath -Raw)
+if ($persistedTeardownState.teardownStatus -cne 'unknown' -or
+    -not $persistedTeardownState.retentionReportAtUtc -or
+    @($persistedTeardownState.teardownResiduals).Count -eq 0) {
+    throw 'Failed group-delete submission did not persist unknown outcome and retention residuals.'
+}
+$script:groupDeleteFails = $false
+$script:groupExistsResponses = @()
+$script:checks++
+$script:executionRoleDeleted = $false
+$script:executionRoleAssignments = @($actionRoleAssignment)
+$script:executionIdentityUnavailable = $true
+$beforeRoleDeletes = $script:executionDeleteCalls
+$null = Remove-GuestExecutionRole
+if (-not $script:executionRoleDeleted -or $script:executionDeleteCalls -ne ($beforeRoleDeletes + 1)) {
+    throw 'Persisted principal did not support cleanup of the exact VM role assignment after identity deletion.'
+}
+$script:executionIdentityUnavailable = $false
+$script:checks++
+$script:executionRoleDeleted = $false
+$script:executionRoleAssignments = @(@{ id = 'foreign'; scope = $groupId; principalId = 'foreign'
+    roleDefinitionId = $script:state.actionRoleDefinitionId })
+$beforeDeletes = $script:executionDeleteCalls
+Assert-Rejected { Remove-GuestExecutionRole }
+if ($script:executionDeleteCalls -ne $beforeDeletes) { throw 'Teardown deleted a foreign custom-role assignment.' }
+$script:checks++
+
 $template = Get-Content (Join-Path $root 'infra\guest-service-target.bicep') -Raw
 if ($template -match 'publicIPAddressResourceId|start/action|stop/action|runCommand/action' -or
     $template -notmatch "acdd72a7-3385-48ef-bd42-f606fba81ae7" -or
@@ -347,6 +665,22 @@ if ($template -match 'publicIPAddressResourceId|start/action|stop/action|runComm
     $template -notmatch 'principalId: agentPrincipalId' -or
     $template -notmatch 'allowExtensionOperations: true' -or $template -notmatch 'natGatewayResourceId: nat.id' -or
     $template -notmatch 'defaultOutboundAccess: false') { throw 'Fixture infrastructure boundary changed.' }
+$script:checks++
+$agentTemplate = Get-Content (Join-Path $root 'infra\guest-service-agent-target.bicep') -Raw
+$agentWrapper = Get-Content (Join-Path $root 'infra\guest-service-agent.bicep') -Raw
+if ($agentTemplate -match 'Contributor' -and $agentTemplate -notmatch 'networkContributorRoleId|sreAdministratorRoleId' -or
+    $agentTemplate -notmatch '(?s)scope:\s*vm.*?roleDefinitionId:\s*actionRole\.id' -or
+    $agentTemplate -notmatch "delegation:\s*'Microsoft.App/environments'" -or
+    $agentTemplate -notmatch "'10\.90\.0\.0/27'" -or $agentTemplate -notmatch 'natGatewayResourceId: nat.id' -or
+    $agentTemplate -notmatch "mode:\s*'Review'" -or $agentTemplate -notmatch "mode:\s*'AzureVNet'" -or
+    $agentTemplate -notmatch "usePrivateDnsResolution:\s*true" -or
+    $agentTemplate -notmatch "accessLevel:\s*'Low'" -or
+    $agentTemplate -match 'allowRules|toolAllow|RunInTerminal|RunShellCommand|ExecutePythonCode' -or
+    $agentWrapper -notmatch 'Microsoft.Compute/virtualMachines/runCommand/action' -or
+    $agentWrapper -notmatch "assignableScopes:\s*\[group\.id\]" -or
+    $agentWrapper -notmatch 'ownerToken=\$\{ownerToken\}') {
+    throw 'Isolated SRE Agent deployment boundary or native approval posture changed.'
+}
 $script:checks++
 $lifecycleSource = Get-Content (Join-Path $root 'scripts\Invoke-GuestService.ps1') -Raw
 if ($lifecycleSource -match "'ad',\s*'signed-in-user'" -or
@@ -367,4 +701,11 @@ $whatIfDirectory = Join-Path $root ".azure\$whatIfEnvironment"
     -EnvironmentName $whatIfEnvironment -WhatIf
 if (Test-Path -LiteralPath $whatIfDirectory) { throw 'Fresh WhatIf created local state or lock.' }
 $script:checks++
+$whatIfSreEnvironment = "dry$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$whatIfSreDirectory = Join-Path $root ".azure\$whatIfSreEnvironment"
+& (Join-Path $root 'scripts\Invoke-GuestService.ps1') Up -SubscriptionId $subscription `
+    -EnvironmentName $whatIfSreEnvironment -WithSreExecution -WhatIf
+if (Test-Path -LiteralPath $whatIfSreDirectory) { throw 'SRE-enabled WhatIf created local state or lock.' }
+$script:checks++
+Remove-Item -LiteralPath $teardownTestDirectory -Recurse -Force
 [pscustomobject]@{ checks = $script:checks; outcome = 'passed'; azureWrites = 0 }

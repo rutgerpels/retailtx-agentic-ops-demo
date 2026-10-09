@@ -92,6 +92,32 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(evidence["watchdogEnabled"])
         self.assertTrue(evidence["watchdogActive"])
 
+    def test_approved_repair_requires_current_deadline_and_active_run(self):
+        self.execute(self.request())
+        repair = self.request("repair")
+        repair["expectedDeadlineUtc"] = self.state["marker"]["deadlineUtc"]
+        self.execute(repair)
+        self.assertTrue(self.active)
+        self.assertEqual(self.state["marker"]["recoveryReason"], "repair")
+        with self.assertRaisesRegex(ValueError, "already recovered"):
+            self.execute(repair)
+
+    def test_approved_repair_rejects_expiry_mismatch_and_reboot(self):
+        self.execute(self.request())
+        repair = self.request("repair")
+        repair["expectedDeadlineUtc"] = controller.utc(1061)
+        with self.assertRaisesRegex(ValueError, "expired"):
+            self.execute(repair)
+        repair["expectedDeadlineUtc"] = controller.utc(1060)
+        self.now = 1060
+        with self.assertRaisesRegex(ValueError, "expired"):
+            self.execute(repair)
+        self.now = 1001
+        with patch.object(controller, "boot_id", return_value="other-boot"):
+            with self.assertRaisesRegex(ValueError, "expired"):
+                self.execute(repair)
+        self.assertFalse(self.active)
+
     def test_watchdog_deadline_canary_proves_longer_fault(self):
         self.execute(self.request())
         self.now = 1059

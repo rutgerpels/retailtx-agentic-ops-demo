@@ -3,7 +3,8 @@
 **Scope:** a stopped application service inside a running native Azure VM,
 not VM start and not the Arc-managed host. Service Bus work remains parked.
 This first gate proves a small guest fixture and the Azure VM Agent command
-transport before adding an autonomous response plan.
+transport before adding a human-approved SRE repair. Alert intake and autonomy
+are later gates.
 
 The fixture represents a posting worker, not the actual RetailTx ERP ledger,
 Service Bus pipeline or business recovery. Do not infer customer impact from
@@ -64,6 +65,11 @@ Recovery follow-up accepts only fresh healthy evidence from the initial run;
 it requires repair attribution to the currently authenticated operator.
 Watchdog recovery is not operator-repair acceptance. `Up -WhatIf` describes
 the operation without preflight, local files or Azure writes.
+
+If thread creation returns no reliable ID, preserve its saved intent and use
+the SRE UI to locate the exact owner marker and fault run. Decline any pending
+actions there, tear down the owned fixture and start with a fresh environment
+rather than replaying creation or hand-editing an uncertain intent into success.
 
 ## Authority boundary
 
@@ -132,16 +138,72 @@ rejection. No exception/default-deny mechanism is documented that meets the
 proposed exact-repair-only acceptance gate. This is a documentation-based
 no-go, not a live negative-policy test or proof about undocumented controls.
 
-Step 1 is blocked on an explicit permission-boundary decision tracked in
-[the owner decision](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/10).
-A supervised Review-mode proof on one disposable VM is a narrower feasible
-experiment: inspect and approve the exact command, verify identity/recovery,
-and remove its grant afterward. It demonstrates approved execution, **not**
-service-only permissions or autonomous safety. Do not infer authorization for
-that weaker boundary from approval of this documentation. If strict fixed-action
-enforcement remains required, retain the recommendation/operator experience
-until a suitable supported control is verified, without introducing another
-custom executor. Alert plumbing and autonomous mode remain deferred.
+The user explicitly resolved
+[the owner decision](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/10):
+demonstrate **human approval before any SRE guest command**, with Review mode
+and privileged Run Command authority limited to one disposable native VM.
+This accepts supervised execution, not a hard service-only permission boundary.
+The retained shared agent must not gain guest-write permissions. Arc remains
+recommendation/operator repair; alert plumbing and autonomous mode remain deferred.
+
+## Human-approved native repair
+
+**2026-10-09: the `demo23` fixture passed this gate.** SRE proposed the exact
+repair command; a human approver independently verified it byte-for-byte
+against the portal's pending card before clicking Approve, and execution ran
+only after that click. See
+[the `demo23` evidence](#human-approved-repair-evidence-demo23) below for the
+full reconciliation. The optional execution fixture uses its own SRE agent,
+action managed identity and delegated network. Its custom VM-scoped role grants
+Action Run Command, not general Contributor, managed Run Command resource writes,
+SSH or OBO elevation. Do not add tool Allow rules that bypass Review.
+
+After the independent canary, inject a non-canary bounded fault and create the
+proposal. Inspect the exact command and pending approval in SRE; **a human**
+clicks Approve. The adapter has no programmatic approval operation.
+
+```powershell
+.\scripts\Invoke-GuestService.ps1 Up -SubscriptionId $subscription -EnvironmentName demo20 -WithSreExecution
+.\scripts\Invoke-GuestServiceApproval.ps1 Configure -SubscriptionId $subscription -EnvironmentName demo20
+.\scripts\Invoke-GuestService.ps1 Fault -SubscriptionId $subscription -EnvironmentName demo20 -Canary
+# Wait for watchdog recovery and collect Status before the normal fault.
+.\scripts\Invoke-GuestService.ps1 Status -SubscriptionId $subscription -EnvironmentName demo20
+.\scripts\Invoke-GuestService.ps1 Fault -SubscriptionId $subscription -EnvironmentName demo20 -FaultDurationSeconds 600
+.\scripts\Invoke-GuestServiceApproval.ps1 Propose -SubscriptionId $subscription -EnvironmentName demo20
+.\scripts\Invoke-GuestServiceApproval.ps1 Read -SubscriptionId $subscription -EnvironmentName demo20
+# Human reviews/approves the exact native RunAzCliWriteCommands card in SRE.
+.\scripts\Invoke-GuestServiceApproval.ps1 Verify -SubscriptionId $subscription -EnvironmentName demo20
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName demo20
+```
+
+Read saves the native execution records without running a guest command. Propose
+uses the operator-collected fault receipt and refuses stale, canary or near-expiry
+evidence. The encoded repair binds owner, source hashes, exact run, action principal
+and deadline; the locked guest controller rejects late, recovered or rebooted
+faults before touching the service. This protects the supplied repair from stale
+approval; it does not constrain arbitrary privileged scripts.
+
+Configure requires Ask for native writes and guest invocations routed through
+the CLI read tool, denies terminal, shell and Python alternatives, and installs
+no Allow rules. These are documented
+[tool access policies](https://learn.microsoft.com/en-us/azure/sre-agent/tool-access-policies),
+not a service-only OS boundary. User-defined hooks and thread/custom-agent
+Allow overrides must remain absent; verify those in the SRE UI as part of the
+supervised gate.
+
+Verify requires an exact completed native execution with no OBO scopes, an
+independent successful Azure Activity Log action by the isolated action principal,
+and fresh operator-collected health with that principal's exact-run repair
+attribution. Watchdog recovery is never accepted as SRE repair. The final supplied
+receipt is explicitly operator-collected, not independent SRE guest verification.
+Guest diagnostic/status commands by SRE would also require human approval and
+are deliberately excluded from this first demo.
+
+Keep the supervised window short. Decline outstanding cards and remove the
+fixture/grant if approval cannot happen before recovery expiry. Do not leave an
+authorized pending command unattended or silently replace human approval with
+an automated test decision. Teardown must report agent retention/residuals rather
+than claim a fully removed environment without checking them.
 
 ## Current evidence
 
@@ -201,3 +263,39 @@ healthy service, but operator lookup failed before fault injection because
 The harness now uses the authenticated Graph `/me` endpoint. The unused fixture
 was removed rather than rebinding its source attestation; `demo19` supplied the
 live fault/recovery evidence above.
+
+## Human-approved repair evidence (`demo23`)
+
+The isolated `demo23` fixture repeated the `demo19` proof with the
+human-approved gate from "Human-approved native repair" live. SRE proposed the
+exact native repair command; the human approver fetched the same pending
+command from the SRE portal, verified it byte-for-byte against the harness's
+expected output, and only then clicked Approve.
+
+| Measurement | Observed outcome |
+| --- | --- |
+| Fault injected | 2026-10-09 19:49:11.957860 UTC |
+| Recovery deadline | 2026-10-09 19:59:11.957860 UTC (ten-minute watchdog window) |
+| Command verification | Portal pending command matched the harness's encoded repair byte-for-byte (965/965 characters), confirmed before approval |
+| Human approval | Approver clicked Approve in the SRE portal only after verification; the adapter exposes no programmatic approval operation |
+| Repair completed | 2026-10-09 19:52:53.185469 UTC, approximately six minutes before the watchdog deadline |
+| Guest-side evidence | `recoveredBy` matched the isolated action principal (`d0c24ad7-...2b59`); `recoveryReason: "repair"`, distinct from `"watchdog"` |
+| Independent Activity Log evidence | A single `correlationId` recorded `Started` -> `Accepted` -> `Succeeded` for the Run Command action, with caller equal to the same action principal; no duplicate or earlier invocation existed in the window |
+
+Three independent lines of evidence (guest-reported attribution, the Azure
+control-plane Activity Log, and the approver's own byte-for-byte verification
+immediately before clicking Approve) agree on exactly one gated invocation.
+This confirms the human-approval gate worked as intended: SRE proposed and
+waited; only the human's own portal click released the command.
+
+### Known tooling limitation, not a gate failure
+
+The adapter's `Read` operation (`Invoke-GuestServiceApproval.ps1 Read`) never
+populated the `approval`, `nativePending` or `nativeCompleted` fields during
+this rehearsal, even while a command was genuinely pending and later executed.
+This reflects a gap in the adapter's structured visibility into the SRE
+portal's native-action approval state, not a bypass of the gate itself; the
+Activity Log and guest evidence independently confirm the single approved
+execution. Operators should treat the SRE portal/chat UI itself, not scripted
+polling against this field, as authoritative for observing and acting on
+pending native-action approvals until that visibility gap is closed.
