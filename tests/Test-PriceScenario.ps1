@@ -15,7 +15,8 @@ $guestAst = [System.Management.Automation.Language.Parser]::ParseFile($guestPath
 if ($guestErrors) { throw ($guestErrors -join "`n") }
 foreach ($functionName in @('Assert-PlainPath', 'New-PriceContentAcl', 'Set-PriceContentAcl', 'Get-PriceHttpFailure',
     'Assert-PriceSiteIdentity', 'Set-PriceSiteIdentity', 'Assert-PriceInstallStage', 'Assert-PriceSiteBinding',
-    'Assert-HealthyPriceObservation', 'Invoke-PriceWatchdogCycle')) {
+    'Assert-HealthyPriceObservation', 'Invoke-PriceWatchdogCycle', 'Wait-OwnedPricePoolStopped',
+    'Stop-OwnedPricePool')) {
     $definition = $guestAst.Find({
         param($node)
         $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $functionName
@@ -46,6 +47,35 @@ function New-HealthyObservation {
         response=@{sku='basket-a';currency='EUR';unit_price_cents=199}
     }
 }
+
+& {
+    $poolName = 'RetailTxPrice-test'
+    $script:stopCalls = 0
+    $script:poolReads = 0
+    function Get-PriceMetadata {}
+    function Stop-WebAppPool {
+        param($Name, $ErrorAction)
+        if ($Name -cne $poolName) { throw 'Stop targeted a different pool.' }
+        $script:stopCalls++
+    }
+    function Get-PricePoolState {
+        $script:poolReads++
+        if ($script:poolReads -eq 1) { return 'Started' }
+        if ($script:poolReads -le 3) { return 'Stopping' }
+        return 'Stopped'
+    }
+    function Start-Sleep { param($Seconds) }
+    Stop-OwnedPricePool
+    if ($script:stopCalls -ne 1 -or $script:poolReads -ne 4) {
+        throw 'Owned pool stop did not wait through asynchronous Stopping before accepting Stopped.'
+    }
+    Stop-OwnedPricePool
+    if ($script:stopCalls -ne 1) { throw 'An already stopped pool was stopped again.' }
+    function Get-PricePoolState { return 'Stopping' }
+    function Start-Sleep { param($Seconds) throw 'Stop transition observation interrupted.' }
+    Assert-Rejected { Wait-OwnedPricePoolStopped }
+}
+$checks++
 
 $stageRoot = Join-Path $PSScriptRoot ("price-stage-regression-" + [guid]::NewGuid())
 $stageOwner = [guid]::NewGuid().ToString()
@@ -450,6 +480,33 @@ $recovered = Invoke-PriceRecoveryDispatch -RunId $run -OwnerToken $owner -Enviro
 if ($script:recoveryCalls -ne 1 -or $script:recoveryRun -cne $run.ToString() -or
     $recovered.privateTelemetry.recoveryActor -cne 'operator-script') {
     throw 'Price recovery dispatch failed to bind the guest action and independent private evidence to one run.'
+}
+$checks++
+
+& {
+    $state = @{
+        ownerToken=$owner; activeRunId=$run.ToString()
+        workspaceCustomerId=$telemetry.workspaceId
+    }
+    $EnvironmentName = $environment
+    $RunId = $run
+    $arcId = $telemetry.arcResourceId
+    $directory = $PSScriptRoot
+    function Save-RetailState { param($Value, $Path) }
+    function Save-State {}
+    function Invoke-PriceGuest { param($Action, $RunId) $healthy }
+    function Invoke-ArcCommand {
+        param($Purpose, $Script)
+        @{ output=($telemetry | ConvertTo-Json -Depth 20 -Compress) }
+    }
+    $verified = Invoke-PriceTelemetryQuery -Expected healthy -RunId $run.ToString()
+    if ($verified.runId -cne $run.ToString() -or $verified.ContainsKey('rows')) {
+        throw 'Default price telemetry result no longer returns a verified observation.'
+    }
+    $actualRecovery = Invoke-PriceScenarioOperation -Operation Recover
+    if ($actualRecovery.privateTelemetry.recoveryActor -cne 'operator-script' -or $state.phase -cne 'armed') {
+        throw 'The actual recovery operation did not pass raw private evidence into its verifier.'
+    }
 }
 $checks++
 

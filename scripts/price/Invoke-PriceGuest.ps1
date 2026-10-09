@@ -357,8 +357,26 @@ function Assert-HealthyPriceService {
     return $observation
 }
 
+function Wait-OwnedPricePoolStopped {
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
+    do {
+        if ((Get-PricePoolState) -ceq 'Stopped') { return }
+        Start-Sleep -Seconds 1
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw 'The owned price pool did not reach Stopped within thirty seconds.'
+}
+
+function Stop-OwnedPricePool {
+    $null = Get-PriceMetadata
+    if ((Get-PricePoolState) -cne 'Stopped') {
+        Stop-WebAppPool -Name $poolName -ErrorAction Stop
+    }
+    Wait-OwnedPricePoolStopped
+}
+
 function Start-OwnedPricePool {
     $null = Get-PriceMetadata
+    if ((Get-PricePoolState) -ceq 'Stopping') { Wait-OwnedPricePoolStopped }
     if ((Get-PricePoolState) -cne 'Started') {
         Start-WebAppPool -Name $poolName -ErrorAction Stop
     }
@@ -534,10 +552,11 @@ try {
         $script:priceState.recoveredAt = $null
         Save-PriceState
         try {
-            Stop-WebAppPool -Name $poolName -ErrorAction Stop
+            Stop-OwnedPricePool
             $observation = Write-PriceObservation 'fault-injected'
             if ($observation.serviceStatus -ne 503 -or $observation.phase -cne $script:priceState.phase -or
-                $observation.baselineHttpStatus -ne 200) {
+                $observation.baselineHttpStatus -ne 200 -or $observation.poolState -cne 'Stopped' -or
+                $observation.contractValid -ne $false) {
                 throw 'Stopping only the owned price pool did not produce a real HTTP failure while baseline IIS remained healthy.'
             }
         } catch {

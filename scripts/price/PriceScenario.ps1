@@ -15,6 +15,12 @@ function Assert-PriceControllerHash {
     }
 }
 
+function ConvertTo-PriceTimestampText {
+    param($Value)
+    if ($Value -is [DateTime] -or $Value -is [DateTimeOffset]) { return $Value.ToString('o') }
+    return [string]$Value
+}
+
 function Assert-PriceObservation {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Observation,
@@ -26,7 +32,7 @@ function Assert-PriceObservation {
     $endpoint = Get-PriceEndpoint $EnvironmentName
     $observedAt = [DateTimeOffset]::MinValue
     if (-not $Observation.observedAt -or
-        -not [DateTimeOffset]::TryParse([string]$Observation.observedAt, [ref]$observedAt) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $Observation.observedAt), [ref]$observedAt) -or
         $observedAt -lt [DateTimeOffset]::UtcNow.AddMinutes(-3) -or
         $observedAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {
         throw 'Price guest evidence is missing, stale or future-dated.'
@@ -71,7 +77,7 @@ function Assert-PriceTelemetry {
     $row = $Evidence.rows[0]
     $observedAt = [DateTimeOffset]::MinValue
     if (-not $row.observedAt -or
-        -not [DateTimeOffset]::TryParse([string]$row.observedAt, [ref]$observedAt) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $row.observedAt), [ref]$observedAt) -or
         $observedAt -lt [DateTimeOffset]::UtcNow.AddMinutes(-3) -or
         $observedAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {
         throw 'Private price telemetry is missing, stale or future-dated.'
@@ -103,7 +109,7 @@ function Assert-PriceFaultReadiness {
     $deadline = [DateTimeOffset]::MinValue
     $recoveredAt = [DateTimeOffset]::MinValue
     if (-not $SafetyProof.observedAt -or
-        -not [DateTimeOffset]::TryParse([string]$SafetyProof.observedAt, [ref]$proofAt) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $SafetyProof.observedAt), [ref]$proofAt) -or
         $proofAt -lt [DateTimeOffset]::UtcNow.AddDays(-1) -or
         $proofAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30) -or
         $SafetyProof.ownerToken -cne $OwnerToken -or
@@ -118,15 +124,15 @@ function Assert-PriceFaultReadiness {
     }
     if ($SafetyProof.recoveryActor -cne 'independent-watchdog' -or
         -not $SafetyProof.deadline -or
-        -not [DateTimeOffset]::TryParse([string]$SafetyProof.deadline, [ref]$deadline) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $SafetyProof.deadline), [ref]$deadline) -or
         -not $SafetyProof.recoveredAt -or
-        -not [DateTimeOffset]::TryParse([string]$SafetyProof.recoveredAt, [ref]$recoveredAt) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $SafetyProof.recoveredAt), [ref]$recoveredAt) -or
         $recoveredAt -lt $deadline -or $recoveredAt -gt $proofAt.AddSeconds(30)) {
         throw 'Price safety proof does not show bounded independent recovery.'
     }
     $telemetryAt = [DateTimeOffset]::MinValue
     if (-not $Telemetry.observedAt -or
-        -not [DateTimeOffset]::TryParse([string]$Telemetry.observedAt, [ref]$telemetryAt) -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $Telemetry.observedAt), [ref]$telemetryAt) -or
         $telemetryAt -lt [DateTimeOffset]::UtcNow.AddMinutes(-3) -or
         $telemetryAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {
         throw 'Price readiness telemetry is missing, stale or future-dated.'
@@ -314,7 +320,8 @@ if ((Get-FileHash -LiteralPath '$scriptPath' -Algorithm SHA256).Hash -cne '$hash
 function Invoke-PriceTelemetryQuery {
     param(
         [ValidateSet('failure', 'healthy')][string]$Expected,
-        [string]$RunId
+        [string]$RunId,
+        [switch]$ReturnEvidence
     )
     $sourcePath = Join-Path $PSScriptRoot 'Get-PriceTelemetry.ps1'
     $source = Get-Content -LiteralPath $sourcePath -Raw
@@ -333,6 +340,7 @@ function Invoke-PriceTelemetryQuery {
         -ArcResourceId $arcId -OwnerToken $state.ownerToken -EnvironmentName $EnvironmentName `
         -RunId $freshRunId -Expected $expected
     Save-RetailState $verified (Join-Path $directory 'price-fresh-telemetry.json')
+    if ($ReturnEvidence) { return $evidence }
     return $verified
 }
 
@@ -593,7 +601,7 @@ function Invoke-PriceScenarioOperation {
         }
         $result = Invoke-PriceRecoveryDispatch -RunId $RunId -OwnerToken $state.ownerToken `
             -EnvironmentName $EnvironmentName -InvokeGuest { param($run) Invoke-PriceGuest -Action Recover -RunId $run } `
-            -GetPrivateTelemetry { Invoke-PriceTelemetryQuery -Expected healthy -RunId $RunId.ToString() } `
+            -GetPrivateTelemetry { Invoke-PriceTelemetryQuery -Expected healthy -RunId $RunId.ToString() -ReturnEvidence } `
             -WorkspaceId $state.workspaceCustomerId -ArcResourceId $arcId
         $state.phase = 'armed'
         Save-State

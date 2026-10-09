@@ -1,7 +1,7 @@
 # Windows Arc price-service scenario
 
 **Implementation status: live installation and Doctor verified HTTP 200, seeded
-JSON, and baseline HTTP 200 on demo12; safety and incident acceptance remain
+JSON, baseline HTTP 200, and a fresh watchdog heartbeat on demo13; safety and incident acceptance remain
 blocked.** The existing operator-first
 disk scenario remains the verified incident proof. Do not describe the new flow
 as a verified retail checkout recovery.
@@ -19,10 +19,23 @@ The fifth fresh fixture installed successfully but its watchdog returned task
 result 1, leaving no fresh heartbeat and blocking SafetyTest. Direct invocation
 identified an unparenthesized `DateTimeOffset.UtcNow` argument in the Watchdog
 dispatch. The corrected dispatch now has an actual Windows PowerShell 5.1
-regression test. It has not been applied or verified on the live guest. Fresh
-attempts were stopped and demo12 was removed; independent checks found no owned
+regression test. Demo12 was removed; independent checks found no owned
 resource group or grants, and the shared SRE Agent remained in Review. Do not
 claim safety recovery or incident completion.
+
+A fresh demo13 installation verified the corrected watchdog heartbeat. Its
+bounded safety canary produced actual HTTP 503 with baseline HTTP 200, but
+the immediate observation reported IIS pool state `Stopping`, not `Stopped`.
+The host correctly rejected incomplete fault evidence. A later read of that
+same run confirmed `Stopped`; no second canary was injected. The controller now
+waits up to thirty seconds for the asynchronous stop transition and checks the
+full stopped-pool failure contract before reporting successful injection.
+Demo13 was removed, with independent checks confirming absence of its resource
+group and owned principal grants.
+Full watchdog recovery and reboot acceptance still require a fresh fixture
+using that source revision. Host regression checks also exercise the actual
+recovery-operation wiring and JSON timestamp deserialization, not just its
+callback helper.
 
 ## What the fixture represents
 
@@ -178,7 +191,8 @@ fault, and expired fault; exact IIS binding and drift rejection; price fault
 dispatch; run/owner/phase/endpoint and freshness validation; controller-digest
 rejection; the seeded response contract; recovery actor; and exact-run private
 telemetry verification. Live installation and healthy local endpoint checks
-passed on demo12, but independent watchdog safety recovery, real IIS fault,
+passed on demo13, with a live watchdog heartbeat and a real safety-canary HTTP
+failure. Independent watchdog safety recovery, accepted fault injection,
 DCR ingestion, alert/SRE investigation, operator rehearsal, and reboot
 acceptance remain unverified. The lifecycle below installation is not accepted.
 
