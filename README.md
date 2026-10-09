@@ -28,6 +28,16 @@ private Arc heartbeat evidence. Three consecutive automated runs completed in
 a start-only role on one isolated VM. These were not human rehearsals. This is
 hybrid visibility plus Azure recovery, not yet retail/business recovery.
 
+A disposable [guest-service repair fixture](docs/guest-service-scenario.md)
+(`demo23`, 2026-10-09) has verified human-approved SRE guest repair end to end:
+SRE proposed the exact native repair command for a stopped systemd service, a
+human approver independently fetched and verified it byte-for-byte against the
+SRE portal's pending card, and execution ran only after that click. Guest-side
+attribution and the Azure Activity Log independently agreed on exactly one
+gated invocation. This uses its own delegated action identity on one isolated
+VM, separate from the shared Arc-managed estate and the disk incident below,
+and is not the retail ERP ledger or business recovery.
+
 An [operator-first Windows Arc disk incident](docs/disk-scenario.md) has now
 worked on three fresh fixtures, including a same-fixture reset and second incident:
 `R:` reached 8% free, Azure Monitor alerted, SRE automatically
