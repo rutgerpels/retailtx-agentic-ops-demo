@@ -337,6 +337,78 @@ complete approved-incident/customer gate. Remaining work:
 | Resolve the native VM Guest Configuration policy conflict for an accepted evaluation-host operating model | Coordinate with the policy owner or use real hybrid hosts; do not silently add exemptions |
 | Add optional Observability Agent comparison, VPN/second region, prevention scenarios, and real hybrid | Only after the baseline incident is repeatable; not blockers for this foundation PR |
 
+### Scenario direction agreed on 2026-10-09
+
+Prioritize an ERP price-service interruption with real checkout failure/recovery
+evidence, then a dedicated Service Bus queue send-disablement comparison that
+removes Arc guest-command delivery from the recovery path. Both remain proposed,
+not implemented or timed. Preserve bounded faults, independent cleanup, private
+telemetry and fixed-action permissions. Changing a fault alone does not remove
+log-alert clearance or evidence-ingestion delays; measure verified business
+recovery/RCA and automatic Monitor clearance separately without silently
+replacing the full-flow acceptance gate.
+
+### Parked third scenario: GitHub-reported incident to SRE recommendation
+
+**Status: brainstormed and parked by user direction; do not implement now.**
+This extends incident intake, not the agent's remediation authority. It is
+independent of the faster-fault experiments above and must not delay them.
+
+| Backlog field | Proposed value |
+| --- | --- |
+| Title | Investigate a GitHub-reported retail incident and recommend a fix |
+| Agile type | Feature; a prerequisite Spike verifies supported GitHub intake and response |
+| Description | An operator reports a synthetic retail symptom in a private GitHub issue. SRE automatically picks it up through a verified integration, correlates bounded private evidence and returns an actionable recommendation without executing a fix |
+| Priority | Deferred behind the agreed faster incident scenarios; numerical WSJF rank pending |
+| Rationale | Demonstrate human-reported incident intake even when Monitor has not alerted, using the same evidence and guardrails rather than another autonomous-action demonstration |
+| Dependencies | Verified product support for issue-triggered intake and response, private allowlisted repository, least-privilege GitHub/telemetry access, incident correlation and approved runbooks |
+| Estimate | Not estimated until the integration Spike establishes the supported path |
+| Labels | Proposed: `feature`, `scenario`, `deferred`, `needs-po-review`; not applied to a GitHub item |
+| Definition of Ready | Not Ready: parked, integration unverified, estimate and WSJF inputs missing |
+
+**Storyboard:** an operator raises an issue such as "checkout price lookups are
+failing while the ERP host is reachable." The verified intake automatically
+creates or associates an SRE investigation, preserving the exact issue URL and
+source provenance. SRE checks the relevant private request/dependency evidence
+and approved runbook, then posts the observed condition, evidence timestamps,
+likely cause, confidence, recommended fixed recovery action and verification
+steps. Missing or conflicting evidence produces an explicit uncertainty or
+clarification request, not an invented cause. Posting the recommendation is the
+only intended write; the issue remains open for human disposition.
+
+Acceptance criteria for the future implementation:
+
+- Given an eligible issue in the allowlisted private repository, when it is
+  raised, then SRE picks it up automatically without manually starting a thread,
+  and preserves the issue-to-investigation link.
+- Given private evidence for the reported symptom, when SRE investigates, then
+  its recommendation cites fresh scoped evidence and an approved recovery
+  procedure without executing remediation.
+- Given missing, stale or conflicting evidence, when SRE responds, then it
+  states the limitation and requests the specific information needed.
+- Given an existing alert-driven investigation or duplicate issue delivery,
+  when intake runs, then it correlates/links the report without duplicate
+  investigations or repeated recommendations.
+- Given malicious instructions in an issue or comment, when SRE reads them,
+  then they remain untrusted incident data: no arbitrary commands, identity
+  switching, permission expansion or disclosure of secrets/customer context.
+- Given the scenario is reset or removed, when its lifecycle runs, then owned
+  trigger configuration and grants are disabled/removed, and existing
+  repository or shared-agent configuration is preserved.
+
+**Assumptions and integration gate:** exact Azure SRE Agent GitHub trigger,
+authentication, filtering and comment-response support have not been verified.
+Prefer supported native integration if confirmed; do not assume a connector,
+webhook or polling service exists. A manual issue-URL handoff can illustrate
+recommendation quality but does not pass automatic-intake acceptance. Do not
+build a custom bridge merely to complete this story without an explicit decision.
+WSJF inputs are unknown; keep `needs-po-review` rather than fabricate a score.
+
+The existing autonomous proof is narrowly scoped native Azure VM start with
+automated test authorization, not autonomous Arc/application repair. This
+future scenario intentionally demonstrates recommendations instead; it requires
+no new guest-write permissions, code-fixing agent or automatically generated PR.
+
 ## 6. Deployment, reset, and teardown are product features
 
 ### Configuration, not customer forks
