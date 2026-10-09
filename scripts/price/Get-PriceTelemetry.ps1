@@ -60,7 +60,10 @@ try {
     $credential = Invoke-RestMethod -Uri $endpoint -Headers @{ Metadata = 'true'; Authorization = "Basic $secret" } `
         -MaximumRedirection 0 -TimeoutSec 30
     $secret = $null
-    $headers.Authorization = "******"
+    if (-not $credential.access_token -or $credential.token_type -ine 'Bearer') {
+        throw 'HIMDS did not return a bearer access token.'
+    }
+    $headers.Authorization = "Bearer $($credential.access_token)"
     $credential = $null
     $kql = @"
 let target = '$ArcResourceId';

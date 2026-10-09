@@ -49,6 +49,49 @@ function New-HealthyObservation {
 }
 
 & {
+    $telemetryPath = Join-Path $PSScriptRoot '..\scripts\price\Get-PriceTelemetry.ps1'
+    $telemetryAst = [System.Management.Automation.Language.Parser]::ParseFile(
+        $telemetryPath, [ref]$null, [ref]$null)
+    $queryTry = $telemetryAst.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.TryStatementAst] -and
+        $node.Body.Extent.Text.Contains('$headers.Authorization')
+    }, $true)
+    if (-not $queryTry) { throw 'Private price telemetry query block was not found.' }
+    $headers = @{}
+    $path = 'mock-himds-challenge'
+    $endpoint = 'http://localhost:40342/mock'
+    $WorkspaceId = [guid]::NewGuid()
+    $ArcResourceId = '/mock-owned-arc'
+    $OwnerToken = [guid]::NewGuid()
+    $EnvironmentName = 'demo14'
+    $addresses = @('10.84.1.10')
+    $script:queryCalls = 0
+    function Get-Content { param($LiteralPath, [switch]$Raw) 'mock-challenge-secret' }
+    function Invoke-RestMethod {
+        param($Uri, $Headers, $MaximumRedirection, $TimeoutSec, $Method, $ContentType, $Body)
+        if ($Uri -ceq $endpoint) {
+            return @{access_token='mock-access-token';token_type='Bearer'}
+        }
+        if ($Headers.Authorization -cne 'Bearer mock-access-token') {
+            throw 'Private price query did not forward the HIMDS bearer token.'
+        }
+        $script:queryCalls++
+        return [pscustomobject]@{tables=@([pscustomobject]@{columns=@();rows=@()})}
+    }
+    $null = . ([scriptblock]::Create($queryTry.Extent.Text))
+    if ($script:queryCalls -ne 1 -or $headers.Count -ne 0 -or $credential -or $secret) {
+        throw 'Private price telemetry did not query exactly once and clear authentication state.'
+    }
+    function Invoke-RestMethod {
+        param($Uri, $Headers, $MaximumRedirection, $TimeoutSec)
+        @{access_token='mock-access-token';token_type='Unexpected'}
+    }
+    Assert-Rejected { & ([scriptblock]::Create($queryTry.Extent.Text)) }
+}
+$checks++
+
+& {
     $poolName = 'RetailTxPrice-test'
     $script:stopCalls = 0
     $script:poolReads = 0
@@ -543,29 +586,53 @@ $watchdogHealthy.recoveredAt = [DateTimeOffset]::UtcNow.AddMinutes(-6).ToString(
 $watchdogHealthy.deadline = [DateTimeOffset]::UtcNow.AddMinutes(-7).ToString('o')
 $freshPrivate = New-HealthyObservation $owner $environment $run.ToString()
 $freshPrivate.recoveryActor = 'independent-watchdog'
-Assert-PriceFaultReadiness -Telemetry $freshPrivate -SafetyProof $watchdogHealthy -OwnerToken $owner `
+Assert-PriceFaultReadiness -Telemetry $freshPrivate -CurrentObservation $freshPrivate -SafetyProof $watchdogHealthy -OwnerToken $owner `
     -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
 $checks++
 
 $staleSafetyProof = $watchdogHealthy.Clone()
 $staleSafetyProof.observedAt = [DateTimeOffset]::UtcNow.AddDays(-1).AddMinutes(-1).ToString('o')
 Assert-Rejected {
-    Assert-PriceFaultReadiness -Telemetry $freshPrivate -SafetyProof $staleSafetyProof -OwnerToken $owner `
+    Assert-PriceFaultReadiness -Telemetry $freshPrivate -CurrentObservation $freshPrivate -SafetyProof $staleSafetyProof -OwnerToken $owner `
         -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
 }
 
 $staleTelemetry = $freshPrivate.Clone()
 $staleTelemetry.observedAt = [DateTimeOffset]::UtcNow.AddMinutes(-4).ToString('o')
 Assert-Rejected {
-    Assert-PriceFaultReadiness -Telemetry $staleTelemetry -SafetyProof $watchdogHealthy -OwnerToken $owner `
+    Assert-PriceFaultReadiness -Telemetry $staleTelemetry -CurrentObservation $freshPrivate -SafetyProof $watchdogHealthy -OwnerToken $owner `
         -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
 }
 
 $badProof = $watchdogHealthy.Clone()
 $badProof.recoveryActor = 'operator-script'
 Assert-Rejected {
-    Assert-PriceFaultReadiness -Telemetry $freshPrivate -SafetyProof $badProof -OwnerToken $owner `
+    Assert-PriceFaultReadiness -Telemetry $freshPrivate -CurrentObservation $freshPrivate -SafetyProof $badProof -OwnerToken $owner `
         -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
 }
 
+$delayedPrivate = $freshPrivate.Clone()
+$delayedPrivate.observedAt = [DateTimeOffset]::UtcNow.AddMinutes(-2).ToString('o')
+$delayedPrivate.watchdogAt = $delayedPrivate.observedAt
+Assert-PriceFaultReadiness -Telemetry $delayedPrivate -CurrentObservation $freshPrivate -SafetyProof $watchdogHealthy `
+    -OwnerToken $owner -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
+$checks++
+$stoppedWatchdog = $freshPrivate.Clone()
+$stoppedWatchdog.watchdogAt = [DateTimeOffset]::UtcNow.AddSeconds(-91).ToString('o')
+Assert-Rejected {
+    Assert-PriceFaultReadiness -Telemetry $delayedPrivate -CurrentObservation $stoppedWatchdog -SafetyProof $watchdogHealthy `
+        -OwnerToken $owner -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
+}
+$foreignCurrent = $freshPrivate.Clone()
+$foreignCurrent.runId = [guid]::NewGuid().ToString()
+Assert-Rejected {
+    Assert-PriceFaultReadiness -Telemetry $delayedPrivate -CurrentObservation $foreignCurrent -SafetyProof $watchdogHealthy `
+        -OwnerToken $owner -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
+}
+$failedCurrent = $freshPrivate.Clone()
+$failedCurrent.serviceStatus = 503
+Assert-Rejected {
+    Assert-PriceFaultReadiness -Telemetry $delayedPrivate -CurrentObservation $failedCurrent -SafetyProof $watchdogHealthy `
+        -OwnerToken $owner -EnvironmentName $environment -ExpiresAt ([DateTimeOffset]::UtcNow.AddHours(2))
+}
 Write-Output "Price-service scenario checks passed: $checks"

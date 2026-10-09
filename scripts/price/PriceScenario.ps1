@@ -98,6 +98,7 @@ function Assert-PriceTelemetry {
 function Assert-PriceFaultReadiness {
     param(
         [Parameter(Mandatory)][System.Collections.IDictionary]$Telemetry,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$CurrentObservation,
         [Parameter(Mandatory)][System.Collections.IDictionary]$SafetyProof,
         [Parameter(Mandatory)][string]$OwnerToken,
         [Parameter(Mandatory)][string]$EnvironmentName,
@@ -144,11 +145,18 @@ function Assert-PriceFaultReadiness {
         $Telemetry.contractValid -ne $true -or -not $Telemetry.response -or
         $Telemetry.response.sku -cne 'basket-a' -or $Telemetry.response.currency -cne 'EUR' -or
         $Telemetry.response.unit_price_cents -ne 199 -or
-        -not $Telemetry.watchdogAt -or
-        [DateTimeOffset]$Telemetry.watchdogAt -lt [DateTimeOffset]::UtcNow.AddSeconds(-90) -or
-        [DateTimeOffset]$Telemetry.watchdogAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30) -or
         $ExpiresAt -le [DateTimeOffset]::UtcNow.AddMinutes(25)) {
         throw 'Price fault requires fresh private healthy evidence, a live watchdog and sufficient fixture lifetime.'
+    }
+    if (-not $Telemetry.runId) { throw 'Price readiness telemetry has no exact run ID.' }
+    Assert-PriceObservation -Observation $CurrentObservation -OwnerToken $OwnerToken -EnvironmentName $EnvironmentName `
+        -RunId $Telemetry.runId -Expected healthy | Out-Null
+    $watchdogAt = [DateTimeOffset]::MinValue
+    if (-not $CurrentObservation.watchdogAt -or
+        -not [DateTimeOffset]::TryParse((ConvertTo-PriceTimestampText $CurrentObservation.watchdogAt), [ref]$watchdogAt) -or
+        $watchdogAt -lt [DateTimeOffset]::UtcNow.AddSeconds(-90) -or
+        $watchdogAt -gt [DateTimeOffset]::UtcNow.AddSeconds(30)) {
+        throw 'Price current guest observation does not prove a live watchdog.'
     }
 }
 
@@ -548,8 +556,9 @@ function Invoke-PriceScenarioOperation {
         $null = Get-OwnedMachine -Arc
         $alert = Get-PriceAlert
         $telemetry = Invoke-PriceTelemetryQuery -Expected healthy
+        $currentObservation = Invoke-PriceGuest -Action Status
         $proof = Get-Content -LiteralPath (Join-Path $directory 'price-watchdog-safety-proof.json') -Raw | ConvertFrom-Json -AsHashtable
-        Assert-PriceFaultReadiness -Telemetry $telemetry -SafetyProof $proof -OwnerToken $state.ownerToken `
+        Assert-PriceFaultReadiness -Telemetry $telemetry -CurrentObservation $currentObservation -SafetyProof $proof -OwnerToken $state.ownerToken `
             -EnvironmentName $EnvironmentName -ExpiresAt ([DateTimeOffset]$state.expiresAt)
         if ($alert.properties.enabled -ne $true) {
             Enable-DiskSrePlan
@@ -578,8 +587,9 @@ function Invoke-PriceScenarioOperation {
         Assert-DiskSreArmed
         Assert-DiskIncidentReset
         $telemetry = Invoke-PriceTelemetryQuery -Expected healthy
+        $currentObservation = Invoke-PriceGuest -Action Status
         $proof = Get-Content -LiteralPath (Join-Path $directory 'price-watchdog-safety-proof.json') -Raw | ConvertFrom-Json -AsHashtable
-        Assert-PriceFaultReadiness -Telemetry $telemetry -SafetyProof $proof -OwnerToken $state.ownerToken `
+        Assert-PriceFaultReadiness -Telemetry $telemetry -CurrentObservation $currentObservation -SafetyProof $proof -OwnerToken $state.ownerToken `
             -EnvironmentName $EnvironmentName -ExpiresAt ([DateTimeOffset]$state.expiresAt)
         $faultId = [guid]::NewGuid()
         $state.activeRunId = $faultId.ToString()

@@ -1,8 +1,9 @@
 # Windows Arc price-service scenario
 
-**Implementation status: live installation and Doctor verified HTTP 200, seeded
-JSON, baseline HTTP 200, and a fresh watchdog heartbeat on demo13; safety and incident acceptance remain
-blocked.** The existing operator-first
+**Implementation status: demo14 verified real HTTP failure and independent
+watchdog recovery to HTTP 200 with the seeded JSON and healthy baseline.
+Reboot safety also passed after reconciling delayed Arc output; full incident
+acceptance remains open.** The existing operator-first
 disk scenario remains the verified incident proof. Do not describe the new flow
 as a verified retail checkout recovery.
 
@@ -32,8 +33,26 @@ waits up to thirty seconds for the asynchronous stop transition and checks the
 full stopped-pool failure contract before reporting successful injection.
 Demo13 was removed, with independent checks confirming absence of its resource
 group and owned principal grants.
-Full watchdog recovery and reboot acceptance still require a fresh fixture
-using that source revision. Host regression checks also exercise the actual
+Demo14 used the corrected revision and passed the first bounded safety test:
+the same run returned HTTP 503 with the pool stopped, then the independent
+watchdog restored HTTP 200, a valid response contract, and baseline HTTP 200
+after its durable deadline. The reboot test's read-only status command exceeded
+the four-minute observer limit. Reading that exact command later, with unchanged
+source and nonce validation and without resubmission, established a new guest
+boot and independent recovery three seconds after the canary deadline.
+The disabled Event-only Monitor rule and owned recommendation-only SRE response
+plan were subsequently configured. Private healthy telemetry was verified
+after correcting the HIMDS bearer-header construction. Its ingestion lag
+exposed a readiness defect: a collected event cannot establish a current
+ninety-second watchdog heartbeat when collection itself takes longer.
+Arming and injection now require both private healthy telemetry no older than
+three minutes and a separately read current guest observation with a watchdog
+heartbeat no older than ninety seconds. Both must match the exact owned run
+and price contract; neither substitutes for the other. Stale private telemetry,
+stale guest heartbeat, mismatched runs and failed current probes remain blocking.
+Full incident acceptance remains open. Delayed command-result visibility is not evidence that
+the guest action did not run.
+Host regression checks also exercise the actual
 recovery-operation wiring and JSON timestamp deserialization, not just its
 callback helper.
 
@@ -191,10 +210,10 @@ fault, and expired fault; exact IIS binding and drift rejection; price fault
 dispatch; run/owner/phase/endpoint and freshness validation; controller-digest
 rejection; the seeded response contract; recovery actor; and exact-run private
 telemetry verification. Live installation and healthy local endpoint checks
-passed on demo13, with a live watchdog heartbeat and a real safety-canary HTTP
-failure. Independent watchdog safety recovery, accepted fault injection,
-DCR ingestion, alert/SRE investigation, operator rehearsal, and reboot
-acceptance remain unverified. The lifecycle below installation is not accepted.
+passed on demo14, with accepted safety-canary HTTP failure and independent
+watchdog recovery. Real incident fault injection, DCR ingestion,
+alert/SRE investigation and operator rehearsal
+acceptance remain unverified. The full incident lifecycle is not accepted.
 
 The persisted JSON watchdog state is also tested on actual Windows PowerShell
 5.1, including healthy reboot, active-fault preservation, expired recovery,
