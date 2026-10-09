@@ -366,9 +366,39 @@ its exact authenticated caller/run/deadline checks are the proposed
 pre-execution boundary. Live provisioning began, including the private queue
 and executor-specific Entra grant; Linux provisioning authentication and Flex
 Consumption configuration failures currently block runtime acceptance.
+An independent live Queue GET also confirmed that the selected ARM API supplies
+neither a queue ETag nor `userMetadata` in the response. Earlier mock-backed
+coordination assumptions therefore cannot support a safe live fault. A private
+Entra-authenticated blob using actual Blob ETags and leases is a potential
+replacement, not an accepted implementation. It could serialize participating
+fault, executor and watchdog writers, but not unrelated ARM administrators.
+No broker fault was attempted under the unsupported contract.
 Arming, fault injection and autonomous recovery remain unverified. The SRE
 identity has no queue-management role; this is an explicit architecture
 addition, not an assumed native capability.
+By user direction on 2026-10-09, this is now a parked feasibility investigation,
+not an open-ended implementation workstream. Partial fixture teardown and
+independent resource/Entra/peering absence checks passed. The blob redesign
+remains unfinished and is not deployment-ready. Prefer a bounded native
+Azure VM-action feasibility check next; the existing native proof used
+automated test approval and does not establish approval-free, alert-triggered
+autonomy.
+
+| Alternative | Verified evidence / remaining gate | Feasibility conclusion |
+|---|---|---|
+| Native Azure VM start | [Existing proof](native-action-proof.md) verifies SRE action identity and recovery with automated test authorization. Alert-triggered, approval-free execution remains unverified. | Preferred bounded next investigation; not yet an autonomous demo. |
+| Azure-hosted application recovery | No supported native action or end-to-end recovery path verified for this workload. | Check action support first; do not provision a new executor speculatively. |
+| Operator-driven Service Bus restoration | Private queue provisioning worked, but no broker incident/recovery flow was exercised. | Possible fallback, but duplicates the Arc recommendation/operator experience. |
+| Custom autonomous Service Bus restoration | Executor, watchdog, private publishing runner and leased state require further runtime and lifecycle acceptance. | Technically plausible; park because complexity is disproportionate to this iteration's demo value. |
+
+The partial `demo15` fixture was removed without injecting a fault. Repeated
+Down returned `Absent`, and independent reads confirmed the resource group,
+external foundation peering and exact executor application/service principal
+absent. The ownership manifest is archived locally; the shared foundation
+remains intentionally retained. Unfinished broker source experiments are not
+part of the verified delivery and must not be deployed or armed. Any renewed
+broker work needs a separate bounded acceptance decision and freshly attested
+fixture.
 
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
