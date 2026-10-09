@@ -418,6 +418,16 @@ follow-up; this is not an uninterrupted rehearsal or autonomous acceptance.
 Alert-driven intake and a defensible guest-write boundary remain separate
 gates. See the scenario guide for timing definitions and limitations.
 
+The subsequent native SRE execution gate found a documented Azure CLI candidate,
+but **no safe guest-write grant for the retained shared agent**. Its live global
+tool-policy lists were empty and remained unchanged. Argument-aware deny rules
+are global only; thread/custom-agent allows cannot supply a deny-by-default
+boundary and can bypass Review approval. Documented hooks run after tool use,
+not before a privileged script executes. A separately owned SRE agent with
+tested global command restrictions is the next native-only candidate; do not
+grant arbitrary guest scripting on the shared agent or build another executor.
+No direct SRE guest action or new fault was exercised in this gate.
+
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic

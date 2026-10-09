@@ -95,6 +95,45 @@ execution platform. If the channel works but authority confinement remains
 unresolved, retain the recommendation/operator proof and report autonomous
 guest repair as blocked by that specific boundary.
 
+## Native SRE execution gate
+
+**2026-10-09 decision: no-go for granting guest-write authority to the retained
+shared agent.** This is an authority-boundary finding, not evidence that native
+SRE execution is unsupported. No new fixture was deployed, fault injected,
+write permission granted or shared setting changed during this gate.
+
+[Execute mitigations in Azure SRE Agent](https://learn.microsoft.com/en-us/azure/sre-agent/execute-mitigations)
+documents native Azure CLI write actions. Combined with Linux Run Command,
+this establishes a documented candidate transport, not verified SRE guest
+execution in this environment. Linux `RunShellScript` accepts arbitrary
+elevated scripts; limiting the role to one VM does not restrict script content.
+
+[Tool access policies](https://learn.microsoft.com/en-us/azure/sre-agent/tool-access-policies)
+now document argument matching, but deny rules exist only at global scope.
+Custom-agent and thread policies only add allows, and an allow skips default
+approval even in Review mode. An exact-command allow alone is therefore
+neither a deny-by-default boundary nor an approval-gated test.
+A read-only live GET of `/api/v2/agent/settings/global` returned empty
+allow, ask and deny lists; the retained agent's ARM action mode remained Review.
+Those settings were left unchanged.
+
+[Agent hooks](https://learn.microsoft.com/en-us/azure/sre-agent/agent-hooks)
+document Stop and **PostToolUse**, not a pre-execution argument veto.
+PostToolUse runs after successful execution and cannot prevent an arbitrary
+guest script from already having run. A hook returning allow can also override
+global policy denies. Do not use prompt instructions or a post-execution hook
+as the privileged repair boundary.
+
+The safe native-only next candidate is a **separately owned SRE agent** with
+isolated identity and tested global deny-by-default command policies, including
+alternate terminal/Python routes and hook overrides. That is a new lifecycle
+and capability gate, not a reason to alter this shared agent. Before any live
+fault, demonstrate allowed exact repair, denied altered script/target, visible
+approval and unchanged denies after cleanup. If those controls cannot be
+enforced, retain the verified recommendation/operator experience rather than
+introduce another custom executor. Alert plumbing and autonomous mode remain
+deferred until this decision is resolved.
+
 ## Current evidence
 
 The isolated `demo19` fixture verified a stopped application service inside a
