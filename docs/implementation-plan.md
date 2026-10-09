@@ -19,6 +19,11 @@ remained permission-blocked, and post-recovery verification used follow-up messa
 Earlier Arc command stalls remain unexplained; repeatability, presentation
 timing and human rehearsal are open. Automatic SRE-to-Arc execution is a later
 gate, not a prerequisite for this milestone.
+The [operator demo runsheet](disk-demo-runsheet.md) now prepares the proposed
+shorter presentation sequence: deployment/warm-up before the session, exact-run
+operator recovery promptly after SRE's proposal, independent verification and
+RCA, then automatic monitor clearance during the walkthrough. It changes no
+alert or safety settings and is not evidence of a shorter measured run.
 Stages 3 onward remain proposed.
 **Assessment date:** 2026-10-09.
 **Scope:** reusable demo product, private infrastructure integration proof, and

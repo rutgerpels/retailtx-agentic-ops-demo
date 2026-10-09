@@ -42,6 +42,10 @@ not accepted, so retain the native-action fallback. Automatic SRE-to-Arc
 remediation is deferred. The test fixture and its external grants were removed;
 the foundation remains intentionally retained and billable.
 
+The [disk demo runsheet](docs/disk-demo-runsheet.md) proposes using the walkthrough
+for alert waits and later clearance, without changing safety or claiming a
+verified shorter runtime.
+
 ## Recommended direction
 
 - Prove repeatability of the operator-first disk scenario before attempting

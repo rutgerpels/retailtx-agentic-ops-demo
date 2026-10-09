@@ -16,6 +16,10 @@ An operator script or safety watchdog is never recorded as an autonomous
 SRE fix. This sequencing supersedes the earlier recommendation to extend the
 native VM-start proof first; that proof remains a verified fallback.
 
+The [operator demo runsheet](disk-demo-runsheet.md) separates a proposed live
+recovery segment from later monitor clearance and prepares exact-run operator
+verification. It changes no alert or safety behavior and has not been rehearsed.
+
 ## Scenario and safeguards
 
 The independently implemented Windows/IIS fixture follows the capacity-incident
