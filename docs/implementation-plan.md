@@ -344,8 +344,13 @@ automatic SRE investigation and recommendation, followed by an operator-run
 fixed repair through Arc. The implemented
 [pricing dependency fixture](price-service-scenario.md) uses an owned IIS pool
 and real loopback HTTP failure/recovery evidence, not the full ERP, checkout
-traffic, or business recovery. Offline checks pass; fresh private live
-acceptance and timing remain in progress. Autonomous Arc repair is deferred.
+traffic, or business recovery. The first live incident verified real HTTP 503,
+automatic alert/SRE investigation, an exact-run recommendation, operator-script
+HTTP 200 recovery about 5m21s after injection, fresh private recovery evidence,
+and an independent SRE recovery note. Ordinary and reboot watchdog safety also
+passed. Automatic alert clearance, teardown, repeatability and human rehearsal
+remain separate gates; this is not yet a customer-repeatable release.
+Autonomous Arc repair is deferred.
 
 The second target is a dedicated Azure Service Bus queue send-disablement with
 **fully autonomous SRE recovery**, not automated test approval presented as

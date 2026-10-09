@@ -53,14 +53,17 @@ verified demo is unproven.
 
 The optional [Arc-managed price-service scenario](docs/price-service-scenario.md)
 adds an owned IIS dependency fixture with real HTTP failure, Monitor evidence,
-and operator-run recovery. It is code-only and not live-verified; it does not
-prove customer checkout, store impact, or ERP recovery. The disk scenario above
-remains the verified Windows Arc proof.
+and operator-run recovery. This synthetic dependency does not
+prove customer checkout, store impact, or ERP recovery. Its first live incident
+now reached automatic SRE investigation, an exact-run recommendation and
+operator-script guest recovery in about 5m21s after injection, followed by an
+independent SRE recovery note. Automatic alert clearance, repeatability and
+human rehearsal are still separate gates.
 
 ## Recommended direction
 
-- Live-verify the operator-first price-service recommendation/manual-recovery
-  scenario before presenting it as retail operations; the current IIS endpoint
+- Complete repeatability and rehearsal of the operator-first price-service
+  recommendation/manual-recovery scenario; the current IIS endpoint
   is a synthetic dependency, not the checkout path. Keep the verified disk
   scenario and native Azure action as fallbacks; successful incidents do not
   make intermittent Arc delivery customer-ready.

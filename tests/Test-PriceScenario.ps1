@@ -526,6 +526,50 @@ if ($script:recoveryCalls -ne 1 -or $script:recoveryRun -cne $run.ToString() -or
 }
 $checks++
 
+$pendingTelemetry = @{
+    workspaceId=$telemetry.workspaceId; arcResourceId=$telemetry.arcResourceId
+    rows=@(@{observedAt=$healthy.observedAt;details=$healthy.Clone()})
+}
+$pendingTelemetry.rows[0].details.phase = 'fault-active'
+$pendingTelemetry.rows[0].details.serviceStatus = 503
+$pendingTelemetry.rows[0].details.poolState = 'Stopped'
+$pendingTelemetry.rows[0].details.contractValid = $false
+$script:telemetryReads = 0
+$script:recoveryCalls = 0
+$laggedRecovery = Invoke-PriceRecoveryDispatch -RunId $run -OwnerToken $owner -EnvironmentName $environment `
+    -WorkspaceId $telemetry.workspaceId -ArcResourceId $telemetry.arcResourceId `
+    -InvokeGuest { $script:recoveryCalls++; $healthy } -GetPrivateTelemetry {
+        $script:telemetryReads++
+        if ($script:telemetryReads -eq 1) { return $pendingTelemetry }
+        return $telemetry
+    } -WaitForTelemetry {}
+if ($script:recoveryCalls -ne 1 -or $script:telemetryReads -ne 2 -or
+    $laggedRecovery.privateTelemetry.recoveryActor -cne 'operator-script') {
+    throw 'Delayed Monitor ingestion replayed recovery or failed to verify the later owned recovery event.'
+}
+$checks++
+$script:recoveryCalls = 0
+Assert-Rejected {
+    Invoke-PriceRecoveryDispatch -RunId $run -OwnerToken $owner -EnvironmentName $environment `
+        -WorkspaceId $telemetry.workspaceId -ArcResourceId $telemetry.arcResourceId `
+        -InvokeGuest { $script:recoveryCalls++; $healthy } -GetPrivateTelemetry { $pendingTelemetry } `
+        -TelemetryTimeoutSeconds 1 -WaitForTelemetry { Start-Sleep -Seconds 1 }
+}
+if ($script:recoveryCalls -ne 1) { throw 'Telemetry timeout replayed the guest repair.' }
+$badPending = @{
+    workspaceId=$telemetry.workspaceId; arcResourceId=$telemetry.arcResourceId
+    rows=@(@{observedAt=$healthy.observedAt;details=$pendingTelemetry.rows[0].details.Clone()})
+}
+$badPending.rows[0].details.runId = [guid]::NewGuid().ToString()
+$script:mismatchedWaitCalls = 0
+Assert-Rejected {
+    Invoke-PriceRecoveryDispatch -RunId $run -OwnerToken $owner -EnvironmentName $environment `
+        -WorkspaceId $telemetry.workspaceId -ArcResourceId $telemetry.arcResourceId `
+        -InvokeGuest { $healthy } -GetPrivateTelemetry { $badPending } `
+        -TelemetryTimeoutSeconds 1 -WaitForTelemetry { $script:mismatchedWaitCalls++; Start-Sleep -Seconds 1 }
+}
+if ($script:mismatchedWaitCalls -ne 0) { throw 'Mismatched telemetry waited instead of failing immediately.' }
+
 & {
     $state = @{
         ownerToken=$owner; activeRunId=$run.ToString()

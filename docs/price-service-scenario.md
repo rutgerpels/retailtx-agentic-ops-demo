@@ -2,8 +2,9 @@
 
 **Implementation status: demo14 verified real HTTP failure and independent
 watchdog recovery to HTTP 200 with the seeded JSON and healthy baseline.
-Reboot safety also passed after reconciling delayed Arc output; full incident
-acceptance remains open.** The existing operator-first
+Reboot safety also passed after reconciling delayed Arc output. A real incident
+reached an SRE recommendation, operator-script recovery and independent SRE
+recovery diagnosis. Automatic alert clearance remains open.** The existing operator-first
 disk scenario remains the verified incident proof. Do not describe the new flow
 as a verified retail checkout recovery.
 
@@ -50,6 +51,29 @@ three minutes and a separately read current guest observation with a watchdog
 heartbeat no older than ninety seconds. Both must match the exact owned run
 and price contract; neither substitutes for the other. Stale private telemetry,
 stale guest heartbeat, mismatched runs and failed current probes remain blocking.
+The real incident was injected once at 13:54:46 UTC. The exact Arc-nested alert
+was observed fired by 13:57:32 UTC; SRE's automatically created thread proposed
+the exact-run operator command at 13:58:53 UTC. Its private workspace query
+confirmed the stopped pool, HTTP 503 and healthy baseline without implying
+retail or customer impact. The operator ran that command once and the guest
+recorded recovery at 14:00:08 UTC, approximately five minutes twenty-one
+seconds after injection. Fresh private Monitor evidence subsequently confirmed
+HTTP 200, valid seeded JSON, baseline 200 and `operator-script` recovery.
+At 14:05:24 UTC, SRE independently refreshed private same-run telemetry and the
+exact nested alert, then wrote a recovery incident note in the existing thread.
+It correctly reported recovered guest health separately from the still-fired
+Monitor alert.
+Automatic alert acknowledgement reported `AuthorizationBlocked`; investigation
+and recommendation nevertheless completed. No acknowledgement permissions
+were broadened and no alert was force-cleared.
+
+The initial recovery verifier queried before the healthy event was ingested
+and rejected the still-current fault event. Read-only observation of the same
+run then established recovery without repeating the repair. The verifier now
+waits up to five minutes for private healthy evidence, retrying only reads of
+valid fresh same-run fault events. Unknown, stale, mismatched or malformed
+evidence and unexpected recovery actors still fail explicitly. One query may
+also incur the existing bounded Arc observer latency.
 Full incident acceptance remains open. Delayed command-result visibility is not evidence that
 the guest action did not run.
 Host regression checks also exercise the actual
@@ -188,7 +212,7 @@ with the exact `runId` shown in the actual alert evidence:
 ```
 
 `Recover` refuses a stale run and waits for actual HTTP 200 plus the exact
-`Price` payload, then independently requires a fresh private Monitor event for
+`Price` payload, then independently waits for a fresh private Monitor event for
 the same run with `recoveryActor: operator-script`. If the watchdog wins the
 race, report that safety recovery explicitly; it is not operator or SRE
 remediation. Wait for alert resolution before another `Fault`. Do not replay an
@@ -211,9 +235,11 @@ dispatch; run/owner/phase/endpoint and freshness validation; controller-digest
 rejection; the seeded response contract; recovery actor; and exact-run private
 telemetry verification. Live installation and healthy local endpoint checks
 passed on demo14, with accepted safety-canary HTTP failure and independent
-watchdog recovery. Real incident fault injection, DCR ingestion,
-alert/SRE investigation and operator rehearsal
-acceptance remain unverified. The full incident lifecycle is not accepted.
+watchdog recovery. Real incident injection, private DCR ingestion, automatic
+alert/SRE investigation, exact-run recommendation and operator-script repair
+and independent SRE recovery diagnosis have been observed once. Automatic alert clearance,
+repeatability and human rehearsal remain open. The full customer-demo lifecycle
+is not accepted.
 
 The persisted JSON watchdog state is also tested on actual Windows PowerShell
 5.1, including healthy reboot, active-fault preservation, expired recovery,

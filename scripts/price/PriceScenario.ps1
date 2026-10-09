@@ -184,19 +184,33 @@ function Invoke-PriceRecoveryDispatch {
         [Parameter(Mandatory)][scriptblock]$InvokeGuest,
         [Parameter(Mandatory)][scriptblock]$GetPrivateTelemetry,
         [Parameter(Mandatory)][string]$WorkspaceId,
-        [Parameter(Mandatory)][string]$ArcResourceId
+        [Parameter(Mandatory)][string]$ArcResourceId,
+        [ValidateRange(1, 300)][int]$TelemetryTimeoutSeconds = 300,
+        [scriptblock]$WaitForTelemetry = { Start-Sleep -Seconds 15 }
     )
     if ($RunId -eq [guid]::Empty) { throw 'Price recovery dispatch requires an explicit run ID.' }
     $guest = & $InvokeGuest $RunId
     Assert-PriceObservation -Observation $guest -OwnerToken $OwnerToken -EnvironmentName $EnvironmentName `
         -RunId $RunId.ToString() -Expected healthy | Out-Null
-    $evidence = & $GetPrivateTelemetry
-    $verified = Assert-PriceTelemetry -Evidence $evidence -WorkspaceId $WorkspaceId -ArcResourceId $ArcResourceId `
-        -OwnerToken $OwnerToken -EnvironmentName $EnvironmentName -RunId $RunId.ToString() -Expected healthy
-    if ($verified.recoveryActor -cne 'operator-script') {
-        throw 'Private telemetry does not independently verify operator-script recovery for the exact run.'
-    }
-    return @{ guest = $guest; privateTelemetry = $verified }
+    $telemetryDeadline = [DateTimeOffset]::UtcNow.AddSeconds($TelemetryTimeoutSeconds)
+    do {
+        $evidence = & $GetPrivateTelemetry
+        $latest = if (@($evidence.rows).Count -eq 1) { $evidence.rows[0].details } else { $null }
+        if ($latest -is [string]) { $latest = $latest | ConvertFrom-Json -AsHashtable }
+        $expected = if ($latest -and $latest.phase -ceq 'fault-active') { 'failure' } else { 'healthy' }
+        $verified = Assert-PriceTelemetry -Evidence $evidence -WorkspaceId $WorkspaceId -ArcResourceId $ArcResourceId `
+            -OwnerToken $OwnerToken -EnvironmentName $EnvironmentName -RunId $RunId.ToString() -Expected $expected
+        if ($expected -ceq 'healthy') {
+            if ($verified.recoveryActor -cne 'operator-script') {
+                throw 'Private telemetry does not independently verify operator-script recovery for the exact run.'
+            }
+            return @{ guest = $guest; privateTelemetry = $verified }
+        }
+        Write-Warning 'Guest recovery is verified; private Monitor still has a fresh same-run fault event. Waiting for ingestion without replaying recovery.'
+        if ([DateTimeOffset]::UtcNow -ge $telemetryDeadline) { break }
+        & $WaitForTelemetry
+    } while ([DateTimeOffset]::UtcNow -lt $telemetryDeadline)
+    throw 'Guest recovery completed, but private recovery telemetry was not observed within the bounded wait. Inspect the same run; do not replay recovery.'
 }
 
 function Get-PriceSreInstructions {
@@ -337,6 +351,7 @@ function Invoke-PriceTelemetryQuery {
     $result = Invoke-ArcCommand -Purpose price-telemetry -Script $script
     $evidence = $result.output | ConvertFrom-Json -AsHashtable
     Save-RetailState $evidence (Join-Path $directory 'price-private-telemetry-query.json')
+    if ($ReturnEvidence) { return $evidence }
     $freshRunId = if ($RunId) { $RunId } elseif ($state.ContainsKey('activeRunId')) { $state.activeRunId } else { $state.initialPriceRunId }
     if (-not $Expected) {
         $latest = if (@($evidence.rows).Count -eq 1) { $evidence.rows[0].details } else { $null }
@@ -348,7 +363,6 @@ function Invoke-PriceTelemetryQuery {
         -ArcResourceId $arcId -OwnerToken $state.ownerToken -EnvironmentName $EnvironmentName `
         -RunId $freshRunId -Expected $expected
     Save-RetailState $verified (Join-Path $directory 'price-fresh-telemetry.json')
-    if ($ReturnEvidence) { return $evidence }
     return $verified
 }
 
