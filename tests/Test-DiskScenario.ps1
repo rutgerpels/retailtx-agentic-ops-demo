@@ -125,6 +125,11 @@ function Invoke-Azure {
     }
 }
 Assert-Manifest $state
+$state.workloadScenario='price-service'
+Assert-Manifest $state -ExpectedScenario 'price-service'
+$script:checks++
+Assert-Rejected { Assert-Manifest $state }
+$state.Remove('workloadScenario')
 & {
     $root = Split-Path $PSScriptRoot
     $fixture = @{

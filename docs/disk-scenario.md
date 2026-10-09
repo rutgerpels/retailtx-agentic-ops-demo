@@ -349,6 +349,13 @@ and billable.
 
 ## Lifecycle commands
 
+The same guarded lifecycle now includes an optional IIS price-dependency
+scenario. Its real guest HTTP fault, Event-only alert, operator recovery
+commands, and explicit non-customer-impact limitations are documented in the
+[Windows Arc price-service scenario](price-service-scenario.md). The code is
+not yet live-verified; this document's disk evidence remains the only accepted
+live scenario proof.
+
 Use PowerShell 7.2+, Azure CLI and Bicep with the authorized subscription and the
 retained foundation manifest. The guest scripts require Windows PowerShell 5.1
 and must not be executed on the operator's laptop. The operator needs scoped

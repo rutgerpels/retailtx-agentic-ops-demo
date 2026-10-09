@@ -339,14 +339,29 @@ complete approved-incident/customer gate. Remaining work:
 
 ### Scenario direction agreed on 2026-10-09
 
-Prioritize an ERP price-service interruption with real checkout failure/recovery
-evidence, then a dedicated Service Bus queue send-disablement comparison that
-removes Arc guest-command delivery from the recovery path. Both remain proposed,
-not implemented or timed. Preserve bounded faults, independent cleanup, private
-telemetry and fixed-action permissions. Changing a fault alone does not remove
-log-alert clearance or evidence-ingestion delays; measure verified business
-recovery/RCA and automatic Monitor clearance separately without silently
-replacing the full-flow acceptance gate.
+Prioritize a service interruption **inside an Arc-managed Windows guest**:
+automatic SRE investigation and recommendation, followed by an operator-run
+fixed repair through Arc. The implemented
+[pricing dependency fixture](price-service-scenario.md) uses an owned IIS pool
+and real loopback HTTP failure/recovery evidence, not the full ERP, checkout
+traffic, or business recovery. Offline checks pass; fresh private live
+acceptance and timing remain in progress. Autonomous Arc repair is deferred.
+
+The second target is a dedicated Azure Service Bus queue send-disablement with
+**fully autonomous SRE recovery**, not automated test approval presented as
+native autonomy. The [private broker slice](servicebus-scenario.md) implements
+infrastructure and a durable sender/receiver probe only. Arming, fault injection
+and SRE recovery remain blocked until a supported pre-execution boundary
+enforces the exact owned queue action; queue-scoped RBAC alone allows other
+property writes. No live broker fixture or SRE queue-write grant has been
+created. A separate fixed-action executor would be an explicit architecture
+addition, not an assumed native capability.
+
+Preserve bounded faults, independent cleanup, private telemetry and fixed-action
+permissions. Changing a fault alone does not remove log-alert clearance or
+evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
+Monitor clearance separately without silently replacing the full-flow
+acceptance gate.
 
 ### Parked third scenario: GitHub-reported incident to SRE recommendation
 
