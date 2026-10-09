@@ -1,0 +1,17 @@
+[Unit]
+Description=RetailTx isolated demo posting worker (no transaction processing)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/retailtx-guest/worker.py
+Restart=no
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_INET
+
+[Install]
+WantedBy=multi-user.target

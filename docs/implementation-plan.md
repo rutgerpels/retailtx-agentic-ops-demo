@@ -339,14 +339,90 @@ complete approved-incident/customer gate. Remaining work:
 
 ### Scenario direction agreed on 2026-10-09
 
-Prioritize an ERP price-service interruption with real checkout failure/recovery
-evidence, then a dedicated Service Bus queue send-disablement comparison that
-removes Arc guest-command delivery from the recovery path. Both remain proposed,
-not implemented or timed. Preserve bounded faults, independent cleanup, private
-telemetry and fixed-action permissions. Changing a fault alone does not remove
-log-alert clearance or evidence-ingestion delays; measure verified business
-recovery/RCA and automatic Monitor clearance separately without silently
-replacing the full-flow acceptance gate.
+Prioritize a service interruption **inside an Arc-managed Windows guest**:
+automatic SRE investigation and recommendation, followed by an operator-run
+fixed repair through Arc. The implemented
+[pricing dependency fixture](price-service-scenario.md) uses an owned IIS pool
+and real loopback HTTP failure/recovery evidence, not the full ERP, checkout
+traffic, or business recovery. The first live incident verified real HTTP 503,
+automatic alert/SRE investigation, an exact-run recommendation, operator-script
+HTTP 200 recovery about 5m21s after injection, fresh private recovery evidence,
+and an independent SRE recovery note. Ordinary and reboot watchdog safety also
+passed. Monitor cleared automatically about 16m21s after injection; the SRE
+incident record remained `new` with blocked acknowledgement. A distinct repeat
+recovered after an operator corrected stale-run SRE evidence; it is not
+uninterrupted repeatability acceptance. Owned teardown and independent grant
+absence passed. New activation-time/freshness instructions require fresh live
+acceptance; repeatability and human rehearsal remain separate gates.
+Autonomous Arc repair is deferred.
+
+The second target is a dedicated Azure Service Bus queue send-disablement with
+**fully autonomous SRE recovery**, not automated test approval presented as
+native autonomy. The [private broker slice](servicebus-scenario.md) implements
+private infrastructure, a durable sender/receiver probe, a separate fixed-action
+executor/deadline watchdog and a private Linux publishing/probe runner.
+Queue-scoped RBAC alone permits other property writes; the executor code and
+its exact authenticated caller/run/deadline checks are the proposed
+pre-execution boundary. Live provisioning began, including the private queue
+and executor-specific Entra grant; Linux provisioning authentication and Flex
+Consumption configuration failures currently block runtime acceptance.
+An independent live Queue GET also confirmed that the selected ARM API supplies
+neither a queue ETag nor `userMetadata` in the response. Earlier mock-backed
+coordination assumptions therefore cannot support a safe live fault. A private
+Entra-authenticated blob using actual Blob ETags and leases is a potential
+replacement, not an accepted implementation. It could serialize participating
+fault, executor and watchdog writers, but not unrelated ARM administrators.
+No broker fault was attempted under the unsupported contract.
+Arming, fault injection and autonomous recovery remain unverified. The SRE
+identity has no queue-management role; this is an explicit architecture
+addition, not an assumed native capability.
+By user direction on 2026-10-09, this is now a parked feasibility investigation,
+not an open-ended implementation workstream. Partial fixture teardown and
+independent resource/Entra/peering absence checks passed. The blob redesign
+remains unfinished and is not deployment-ready. Prefer a bounded native
+Azure VM-action feasibility check next; the existing native proof used
+automated test approval and does not establish approval-free, alert-triggered
+autonomy.
+
+| Alternative | Verified evidence / remaining gate | Feasibility conclusion |
+|---|---|---|
+| Native Azure VM start | [Existing proof](native-action-proof.md) verifies SRE action identity and recovery with automated test authorization. Alert-triggered, approval-free execution remains unverified. | Preferred bounded next investigation; not yet an autonomous demo. |
+| Azure-hosted application recovery | No supported native action or end-to-end recovery path verified for this workload. | Check action support first; do not provision a new executor speculatively. |
+| Operator-driven Service Bus restoration | Private queue provisioning worked, but no broker incident/recovery flow was exercised. | Possible fallback, but duplicates the Arc recommendation/operator experience. |
+| Custom autonomous Service Bus restoration | Executor, watchdog, private publishing runner and leased state require further runtime and lifecycle acceptance. | Technically plausible; park because complexity is disproportionate to this iteration's demo value. |
+
+The partial `demo15` fixture was removed without injecting a fault. Repeated
+Down returned `Absent`, and independent reads confirmed the resource group,
+external foundation peering and exact executor application/service principal
+absent. The ownership manifest is archived locally; the shared foundation
+remains intentionally retained. Unfinished broker source experiments are not
+part of the verified delivery and must not be deployed or armed. Any renewed
+broker work needs a separate bounded acceptance decision and freshly attested
+fixture.
+
+By user direction, the next bounded gate is
+[native Azure VM guest-service recovery](guest-service-scenario.md), not VM
+start. Keep the VM running while a disposable application service is stopped.
+Prove current guest evidence, an independent deadline watchdog, exact-run
+operator repair and owned teardown first. SRE can reason over explicitly
+attributed operator-collected guest receipts without receiving privileged
+Run Command authority. Direct SRE guest execution and alert-triggered autonomy
+remain separate gates: VM-scoped Run Command RBAC is not a service-only action
+boundary. Do not recreate the parked broker's custom execution platform.
+The first native guest fixture (`demo19`) verified a real stopped worker with
+the VM still running, independent canary recovery in 62 seconds, SRE read-only
+diagnosis and exact-run operator repair 5m26s after the actual service stop.
+SRE recorded recovery about ten minutes after the stop, using attributed guest
+receipts. A persisted timestamp comparison required correction before that
+follow-up; this is not an uninterrupted rehearsal or autonomous acceptance.
+Alert-driven intake and a defensible guest-write boundary remain separate
+gates. See the scenario guide for timing definitions and limitations.
+
+Preserve bounded faults, independent cleanup, private telemetry and fixed-action
+permissions. Changing a fault alone does not remove log-alert clearance or
+evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
+Monitor clearance separately without silently replacing the full-flow
+acceptance gate.
 
 ### Parked third scenario: GitHub-reported incident to SRE recommendation
 

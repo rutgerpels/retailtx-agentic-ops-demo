@@ -1,0 +1,11 @@
+[Unit]
+Description=RetailTx recurring and reboot-safe recovery guard
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=5s
+AccuracySec=1s
+Unit=retailtx-guest-watchdog.service
+
+[Install]
+WantedBy=timers.target

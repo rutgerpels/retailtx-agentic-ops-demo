@@ -1,7 +1,7 @@
 #Requires -Version 7.2
 <#
 .SYNOPSIS
-Provision and probe an isolated Windows Arc disk-scenario host.
+Provision and probe an isolated Windows Arc scenario host.
 .DESCRIPTION
 Uses the retained foundation's private subnet and Arc private-link scope.
 Native Compute Run Command is provisioning-only. Probe uses HybridCompute
@@ -34,6 +34,9 @@ Generic fixture name, separate from the retained foundation.
 Owned foundation manifest supplying private network and SRE integration IDs.
 .PARAMETER RunId
 Exact current run to recover; never inferred from an arbitrary pressure file.
+.PARAMETER Scenario
+Select the retained disk fixture or the owned IIS price-service fixture. Existing
+manifests default to disk; the selected value must match the saved manifest.
 .PARAMETER RebootDuringSafetyTest
 SafetyTest only: use a five-minute one-MiB canary, restart the owned backing
 VM, and require a new guest boot followed by independent watchdog recovery.
@@ -45,6 +48,7 @@ Owned state or real command evidence; never a simulated incident result.
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
 param(
     [Parameter(Mandatory, Position = 0)][ValidateSet('Up', 'Status', 'Probe', 'Install', 'Reconcile', 'Doctor', 'SafetyTest', 'Recover', 'Monitor', 'Telemetry', 'Incident', 'Connect', 'Disconnect', 'Arm', 'Fault', 'Down')][string]$Operation,
+    [ValidateSet('disk', 'price-service')][string]$Scenario = 'disk',
     [Parameter(Mandatory)][guid]$SubscriptionId,
     [string]$EnvironmentName = 'demo03',
     [string]$FoundationEnvironment = 'stage0',
@@ -89,6 +93,7 @@ function Archive-DeletedDiskEvidence {
     }
 }
 . (Join-Path $PSScriptRoot 'disk\DiskSre.ps1')
+. (Join-Path $PSScriptRoot 'price\PriceScenario.ps1')
 function Test-ArcConnection {
     param([hashtable]$Machine)
     return $Machine -and $Machine.ContainsKey('properties') -and $Machine.properties -and
@@ -104,11 +109,14 @@ function Get-OwnedGroup {
     return $group
 }
 function Assert-Manifest {
-    param([hashtable]$Value)
+    param([hashtable]$Value, [ValidateSet('disk', 'price-service')][string]$ExpectedScenario = 'disk')
+    $recordedScenario = if ($Value.ContainsKey('workloadScenario')) { $Value.workloadScenario } else { 'disk' }
     if ($Value.schemaVersion -ne 1 -or $Value.profile -cne 'disk-scenario' -or
         $Value.subscriptionId -ine $subscription -or $Value.environmentName -cne $EnvironmentName -or
         $Value.groupId -ine $groupId -or $Value.vmId -ine $vmId -or $Value.arcId -ine $arcId -or
-        $Value.foundationEnvironment -cne $FoundationEnvironment) { throw 'Disk fixture manifest mismatch.' }
+        $Value.foundationEnvironment -cne $FoundationEnvironment -or $recordedScenario -cne $ExpectedScenario) {
+        throw 'Arc scenario manifest mismatch; select the exact scenario recorded by this fixture.'
+    }
     $null = [guid]::Parse($Value.ownerToken)
     $null = [guid]::Parse($Value.privateLinkRoleName)
     $expectedScope = "/subscriptions/$subscription/resourceGroups/rg-retailtx-$FoundationEnvironment-swedencentral/providers/Microsoft.HybridCompute/privateLinkScopes/pls-retailtx-$FoundationEnvironment-arc"
@@ -198,11 +206,15 @@ function Get-ArcCommand {
 }
 function Invoke-ArcCommand {
     param(
-        [ValidateSet('probe', 'install', 'status', 'safety-test', 'fault', 'recover', 'telemetry')][string]$Purpose,
+        [ValidateSet('probe', 'install', 'status', 'safety-test', 'fault', 'recover', 'telemetry',
+            'price-install', 'price-reconcile', 'price-status', 'price-safety-test', 'price-fault', 'price-recover', 'price-telemetry')][string]$Purpose,
         [string]$Script
     )
     $machine = Get-OwnedMachine -Arc
     if (-not (Test-ArcConnection $machine)) { throw 'Arc host is not Connected.' }
+    if ($state.ContainsKey('workloadScenario') -and $state.workloadScenario -ceq 'price-service') {
+        Remove-CompletedPriceCommand
+    }
     $nonce = [guid]::NewGuid().ToString()
     $marker = "RETAILTX_GUEST_RESULT:$nonce"
     $commandName = "$Purpose-$([guid]::NewGuid().ToString('N'))"
@@ -350,9 +362,13 @@ function Wait-DiskMonitorAgent {
     throw 'Existing monitoring extension did not settle within ten minutes; no deployment retry was submitted.'
 }
 function Invoke-DiskMonitorDeployment {
-    param([string]$ParameterFile)
+    param(
+        [Parameter(Mandatory)][string]$ParameterFile,
+        [string]$TemplateFile = 'infra\disk-monitor.bicep',
+        [string]$DeploymentName = 'disk-monitor'
+    )
     $arguments = @('deployment', 'group', 'create', '--resource-group', $groupName,
-        '--name', 'disk-monitor', '--template-file', (Join-Path $root 'infra\disk-monitor.bicep'),
+        '--name', $DeploymentName, '--template-file', (Join-Path $root $TemplateFile),
         '--parameters', "@$ParameterFile")
     $extensionId = "$arcId/extensions/AzureMonitorWindowsAgent"
     $extensions = Invoke-Azure @('rest', '--method', 'get', '--url',
@@ -365,10 +381,10 @@ function Invoke-DiskMonitorDeployment {
     }
     try { return Invoke-Azure $arguments -TimeoutSeconds 900 } catch {
         $failure = $_
-        $deployment = Invoke-Azure @('deployment', 'group', 'show', '--resource-group', $groupName, '--name', 'disk-monitor')
+        $deployment = Invoke-Azure @('deployment', 'group', 'show', '--resource-group', $groupName, '--name', $DeploymentName)
         if ($deployment.properties.provisioningState -cne 'Failed') { throw $failure }
         $operations = @(Invoke-Azure @('deployment', 'operation', 'group', 'list',
-            '--resource-group', $groupName, '--name', 'disk-monitor'))
+            '--resource-group', $groupName, '--name', $DeploymentName))
         $failed = @($operations | Where-Object { $_.properties.provisioningState -ceq 'Failed' })
         if (-not $failed.Count -or $existing.Count) { throw $failure }
         foreach ($operation in $failed) {
@@ -549,7 +565,7 @@ $sharedLease = $null
 try {
     if (Test-Path -LiteralPath $statePath) {
         $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
-        Assert-Manifest $state
+        Assert-Manifest $state -ExpectedScenario $Scenario
         if ($state.tenantId -ine $account.tenantId) { throw 'Disk fixture tenant mismatch.' }
     }
     if (-not $state -and $Operation -ne 'Up') { throw 'No owned disk fixture manifest exists.' }
@@ -576,7 +592,8 @@ try {
         if ($group) { throw 'Existing group prevents fresh provisioning.' }
         Archive-DeletedDiskEvidence
         $state = @{
-            schemaVersion = 1; profile = 'disk-scenario'; subscriptionId = $subscription; tenantId = $account.tenantId
+            schemaVersion = 1; profile = 'disk-scenario'; workloadScenario = $Scenario
+            subscriptionId = $subscription; tenantId = $account.tenantId
             environmentName = $EnvironmentName; foundationEnvironment = $FoundationEnvironment
             ownerToken = [guid]::NewGuid().ToString(); groupId = $groupId; vmId = $vmId; arcId = $arcId
             privateLinkScopeId = $foundation.outputs.ARC_PRIVATE_LINK_SCOPE_ID
@@ -587,7 +604,7 @@ try {
             expiresAt = [DateTimeOffset]::UtcNow.AddHours(4).ToString('o')
         }
         $state.privateLinkRoleId = "$($state.privateLinkScopeId)/providers/Microsoft.Authorization/roleAssignments/$($state.privateLinkRoleName)"
-        Assert-Manifest $state
+        Assert-Manifest $state -ExpectedScenario $Scenario
         Save-State
         $tags = @{ demo = 'retailtx'; environmentId = $EnvironmentName; ownerToken = $state.ownerToken
             managedBy = 'retailtx'; profile = 'disk-scenario'; expiresAt = $state.expiresAt }
@@ -665,6 +682,8 @@ try {
         $state.phase = 'arc-connected'
         Save-State
         $state
+    } elseif ($Scenario -ceq 'price-service' -and $Operation -cne 'Down') {
+        Invoke-PriceScenarioOperation -Operation $Operation
     } elseif ($Operation -eq 'Probe') {
         Invoke-ArcProbe
     } elseif ($Operation -eq 'Monitor') {

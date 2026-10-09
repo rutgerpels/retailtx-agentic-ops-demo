@@ -51,11 +51,25 @@ grant placement, no-write grant reconciliation and precise SRE alert-read
 instructions are implemented. The full flow still took 28 minutes; a faster
 verified demo is unproven.
 
+The optional [Arc-managed price-service scenario](docs/price-service-scenario.md)
+adds an owned IIS dependency fixture with real HTTP failure, Monitor evidence,
+and operator-run recovery. This synthetic dependency does not
+prove customer checkout, store impact, or ERP recovery. Its first live incident
+now reached automatic SRE investigation, an exact-run recommendation and
+operator-script guest recovery in about 5m21s after injection, followed by an
+independent SRE recovery note. Automatic Monitor clearance took about 16m21s
+after injection. A distinct repeat recovered after an operator corrected SRE's
+stale-run diagnosis; it is not uninterrupted repeatability acceptance. The
+fixture and its external grants were removed. Human rehearsal remains open.
+Guest repair, SRE diagnosis and alert clearance are measured separately.
+
 ## Recommended direction
 
-- Prove repeatability of the operator-first disk scenario before attempting
-  automatic guest remediation. Keep the proven native Azure action as a fallback;
-  successful incidents do not make intermittent Arc delivery customer-ready.
+- Complete repeatability and rehearsal of the operator-first price-service
+  recommendation/manual-recovery scenario; the current IIS endpoint
+  is a synthetic dependency, not the checkout path. Keep the verified disk
+  scenario and native Azure action as fallbacks; successful incidents do not
+  make intermittent Arc delivery customer-ready.
 - Use Azure Monitor for evidence and Azure SRE Agent for investigation and
   approval-gated recovery.
 - Make Azure Copilot Observability Agent an optional Azure Monitor investigation

@@ -1,0 +1,13 @@
+[Unit]
+Description=RetailTx independent bounded guest service recovery
+After=retailtx-demo-posting-worker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/retailtx-guest/controller.py --watchdog
+TimeoutStartSec=45
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/retailtx-guest
