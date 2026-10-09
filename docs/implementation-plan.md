@@ -400,6 +400,24 @@ part of the verified delivery and must not be deployed or armed. Any renewed
 broker work needs a separate bounded acceptance decision and freshly attested
 fixture.
 
+By user direction, the next bounded gate is
+[native Azure VM guest-service recovery](guest-service-scenario.md), not VM
+start. Keep the VM running while a disposable application service is stopped.
+Prove current guest evidence, an independent deadline watchdog, exact-run
+operator repair and owned teardown first. SRE can reason over explicitly
+attributed operator-collected guest receipts without receiving privileged
+Run Command authority. Direct SRE guest execution and alert-triggered autonomy
+remain separate gates: VM-scoped Run Command RBAC is not a service-only action
+boundary. Do not recreate the parked broker's custom execution platform.
+The first native guest fixture (`demo19`) verified a real stopped worker with
+the VM still running, independent canary recovery in 62 seconds, SRE read-only
+diagnosis and exact-run operator repair 5m26s after the actual service stop.
+SRE recorded recovery about ten minutes after the stop, using attributed guest
+receipts. A persisted timestamp comparison required correction before that
+follow-up; this is not an uninterrupted rehearsal or autonomous acceptance.
+Alert-driven intake and a defensible guest-write boundary remain separate
+gates. See the scenario guide for timing definitions and limitations.
+
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
