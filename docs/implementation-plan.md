@@ -10,15 +10,17 @@ Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
 recorded in the [Azure application guide](azure-deployment.md).
 The user-directed [operator-first Windows Arc disk scenario](disk-scenario.md)
-has completed one real fault, alert-triggered SRE investigation/proposal,
+has completed real faults on two fresh fixtures, alert-triggered SRE investigation/proposal,
 supplied operator-script recovery, private recovery verification, automatic
-monitor-condition clearance and final SRE note. Acknowledgment remained
-permission-blocked, and post-recovery verification used follow-up messages.
+monitor-condition clearance and final SRE note. Same-fixture reset produced
+distinct alerts and threads after prior clearance; the second incident needed
+one read-only SRE verification retry after an internal error. Acknowledgment
+remained permission-blocked, and post-recovery verification used follow-up messages.
 Earlier Arc command stalls remain unexplained; repeatability, presentation
 timing and human rehearsal are open. Automatic SRE-to-Arc execution is a later
 gate, not a prerequisite for this milestone.
 Stages 3 onward remain proposed.
-**Assessment date:** 2026-10-08.
+**Assessment date:** 2026-10-09.
 **Scope:** reusable demo product, private infrastructure integration proof, and
 local transaction correctness, the private Azure application lifecycle, a
 small native-action integration proof and an operator-first disk incident.
@@ -311,7 +313,7 @@ complete approved-incident/customer gate. Remaining work:
 
 | Work remaining | Dependency or boundary |
 | --- | --- |
-| Establish repeatability and presentation timing for the operator-first disk incident | One fresh fixture completed actual pressure, alert-triggered SRE investigation, exact-run operator recovery, fresh private telemetry, automatic monitor-condition clearance and an SRE note. Earlier Arc command stalls remain unexplained. Recovery took about 15 minutes from fault request and the final note about 29 minutes; acknowledgment remained AuthorizationBlocked. Repeat fresh cycles and rehearse before recommending a primary live demo; retain the native-action fallback |
+| Establish repeatability and presentation timing for the operator-first disk incident | Two fresh fixtures completed actual pressure, alert-triggered SRE investigation, exact-run operator recovery, private verification, automatic monitor-condition clearance and an SRE note. A same-fixture reset also produced a distinct run, alert and thread after prior clearance. The fresh repeat recovered about nine minutes after fault request; the reset recovered in about eleven minutes. Full flows took about 28 and 30 minutes, including counter convergence and the documented stateful-alert clearance interval. The reset required one read-only SRE verification retry after an internal error. Read-only exact-incident snapshots and a previous-alert-resolution reset gate are implemented. Earlier Arc stalls remain unexplained; acknowledgment remained AuthorizationBlocked. These are three incidents across two fresh fixtures, not three fresh cycles. Complete the remaining fresh cycles and human rehearsal before recommending a primary live demo; retain the native-action fallback |
 | Evaluate automatic guest recovery only after the operator-led incident is reliable | Separate Arc delivery, SRE tool support, approval boundaries and host/platform configuration. Native VM start remains the narrower verified fallback, not proof of guest remediation |
 | Preserve the private Azure application profile as incomplete work until its live acceptance gates pass | Application identity, private connectivity and backlog recovery worked; final trace acceptance and repeatable guest control did not pass. Evidence belongs in the Azure application guide |
 | Automate validation/deploy/reset/destroy in CI with OIDC, generic profiles, and externally scheduled expiry | Extend the existing operator lifecycle; no budget requirement |

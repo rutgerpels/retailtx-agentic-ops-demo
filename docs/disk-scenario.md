@@ -1,7 +1,8 @@
 # Windows Arc disk-capacity scenario
 
-**Status: one operator-first incident verified, not customer-ready.** A fresh
-fixture completed the following flow on 2026-10-08:
+**Status: operator-first incidents verified on two fresh fixtures, not
+customer-ready.** Fresh fixtures completed the following flow on 2026-10-08
+and 2026-10-09:
 
 1. Introduce bounded pressure on a disposable data volume.
 2. Receive a real Azure Monitor alert.
@@ -162,6 +163,95 @@ foundation remains intentionally retained and billable. Local incident and
 teardown proofs remain under ignored `.azure\demo04`; historical telemetry,
 audit records and conversation history are not claimed as erased.
 
+## Fresh deployment repeat, 2026-10-09
+
+Fresh `demo05` repeated the complete operator-first flow without reusing an
+earlier fixture's installation, canary or incident proof. Three Arc probes,
+installation, Doctor, the independent canary, private monitoring and SRE
+configuration passed. Provisioning started at 06:31:36 UTC; arming finished at
+07:00:22 UTC. Setup remained approximately 29 minutes, outside incident timing.
+
+| Boundary | Observed UTC time and evidence |
+| --- | --- |
+| Fault operation started | 07:00:22; fresh telemetry and reset checks precede submission |
+| Fault requested | 07:03:14; unique run `f4ba3323-66aa-4269-ac22-7e87dd435b49` |
+| Real capacity pressure | Perf dropped at 07:04:54; guest observation at 07:05:13 confirmed 8% free and IIS 200 |
+| Alert and automatic investigation | Alert fired at 07:06:21; linked SRE thread started at 07:07:46, without manually starting investigation |
+| Operator proposal | 07:10:00; exact current-run recovery command, fresh watchdog and capacity-only impact |
+| Operator recovery | 07:12:21; `operator-script` restored 99.43% free, before the 07:24:05 watchdog deadline |
+| Independent recovery verification | SRE observed Perf at 99.435998% at 07:15:25 and the matching healthy watchdog at 07:15:30; RCA recorded at 07:16:26 |
+| Automatic alert clearance | Individual alert resolved at 07:26:10; SRE independently verified clearance and wrote its final addendum at 07:28:10 |
+
+The new read-only `Incident` operation observed the exact alert and linked
+thread. Its first live call exposed a PowerShell JSON-date conversion bug before
+querying incidents: reparsing a deserialized DateTime through a culture-specific
+string changed October 9 into September 10. Direct DateTimeOffset conversion
+fixed the observer; US/Dutch JSON-round-trip checks now cover that path.
+The existing fault was not replayed.
+
+Guest recovery and monitoring convergence were separate. Perf still reported
+approximately 8% through 07:13:55 despite a healthy guest event; SRE withheld
+verification until the counter converged. Alert clearance then lagged guest
+recovery by approximately 14 minutes. This rule uses a one-minute evaluation
+frequency with automatic mitigation; Microsoft documents a
+[ten-minute nonbreaching interval for stateful log-alert resolution](https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-overview#alerts-and-state).
+That interval follows counter convergence, not the operator command's return.
+It is not evidence of failed guest recovery or an Arc command stall.
+Acknowledgment remained
+`AuthorizationBlocked`, with alert state `New`; no forced acknowledgment,
+closure or permission expansion was used. Post-recovery SRE checks and the final
+addendum required operator follow-up messages in the original thread.
+
+Fault request to guest recovery was approximately nine minutes, but the full
+fault-operation-to-final-note flow took approximately 28 minutes. This is not
+a twelve-minute end-to-end presentation or a human rehearsal. Two fresh
+successful fixtures do not satisfy the three-fresh-cycle release gate.
+The first repeat's asserted proof and raw evidence are preserved under ignored
+`.azure\demo05\runs\f4ba3323-66aa-4269-ac22-7e87dd435b49`.
+
+### Same-fixture reset and second incident
+
+After observing the first individual alert as `Resolved`, a second `Fault`
+passed the reset guard on the same fixture. Initial observation returned
+`awaiting` rather than inheriting the previous alert or thread. The new run,
+`e8d402fd-9f38-4b2b-b090-9ed7b903ae32`, produced a distinct alert and an
+automatically initiated SRE thread. SRE rejected stale earlier-run recovery
+evidence and proposed recovery for the current run.
+
+| Boundary | Observed UTC time and evidence |
+| --- | --- |
+| Fault operation and request | Operation started at 07:29:07; request recorded at 07:30:55 |
+| Real pressure | 07:33:29; 8% free, IIS 200, independent watchdog deadline 07:52:14 |
+| Alert and automatic investigation | Alert fired at 07:36:22; distinct linked thread started at 07:37:12 |
+| Operator proposal | 07:39:01; exact current-run recovery command |
+| Operator recovery | 07:41:49; `operator-script` restored 99.43% free before the watchdog deadline |
+| Independent telemetry convergence | Private Perf showed 99.435998% at 07:45:55 with matching healthy guest evidence |
+| SRE verification interruption and retry | Internal error at 07:46:22; one bounded read-only retry verified recovery and produced an RCA at 07:48:15 |
+| Automatic alert clearance | Individual alert resolved at 07:56:23; observed `Resolved` at 07:58:04 |
+| Final SRE addendum | 07:58:52; independently verified the exact resolved alert, 99.435998% private Perf, same-run operator recovery, IIS 200 and a fresh watchdog |
+
+Fault request to guest recovery was approximately eleven minutes; the complete
+fault-operation-to-final-note flow took approximately thirty minutes. The
+internal-error interruption remains part of the record: a successful retry
+does not make this an uninterrupted success. Neither the fault nor recovery
+was resubmitted, and permissions were not widened. Monitor condition `Resolved`
+remained separate from alert state `New`; no forced closure was used.
+
+This verifies same-fixture reinjection after clearance, with distinct run,
+alert and thread identities. It is a third completed incident across two fresh
+fixtures, not three fresh deployment/demo/reset/destruction cycles. Asserted
+proof and raw evidence are preserved under ignored
+`.azure\demo05\runs\e8d402fd-9f38-4b2b-b090-9ed7b903ae32`.
+
+Owned teardown completed at 08:05:58 UTC; repeat `Down` completed at 08:06:15.
+An independent read at 08:06:51 confirmed the fixture group absent and zero
+owned live resources, including removal of its Arc machine and retained Run
+Commands. Owned workspace/bootstrap grants, scenario investigator and response
+plan were absent. SRE's foundation-only scope, null incident platform and absent
+disk-owner tag were restored. Proof remains under ignored `.azure\demo05`.
+The reusable foundation remains intentionally retained and billable;
+historical telemetry and conversations are not claimed as erased.
+
 ## Lifecycle commands
 
 Use PowerShell 7.2+, Azure CLI and Bicep with the authorized subscription and the
@@ -260,9 +350,42 @@ the exact new run ID before submitting the bounded fault. An uncertain request
 blocks further injection and safety tests until that exact run is resolved;
 recovering an older healthy run cannot clear the pending-fault gate.
 
+Observe the current fault without submitting another guest command:
+
+```powershell
+.\scripts\Invoke-DiskScenario.ps1 Incident -SubscriptionId $subscription -EnvironmentName $environment
+```
+
+`Incident` takes one bounded read-only snapshot, rather than polling indefinitely.
+It checks the owned fixture, rule and shared SRE configuration, discovers alerts
+for the exact Arc target within the last day, and rejects incomplete discovery,
+ambiguous matches, foreign IDs and invalid timestamps. Only activations after
+the recorded fault request qualify. A separate fault-run binding prevents a
+later safety canary from inheriting an earlier incident.
+
+The individual Azure alert is authoritative for `monitorCondition`; the exact
+SRE incident keyed by that alert GUID is authoritative for `threadId` and
+acknowledgment. The operation does not rely on incident-list thread metadata or
+follow response-provided URLs. `awaiting` means no qualifying alert was discovered
+in this snapshot, not proof that no alert will arrive. A missing SRE incident or
+thread is reported as not yet observed, never as successful investigation.
+Failed requests remain errors; they are not converted into absence.
+
+Each snapshot has a unique run-scoped filename under ignored `.azure`.
+`resolved` means the monitor condition cleared, not verified guest health or
+automatic incident acknowledgment/closure. Continue requiring fresh private
+Perf/Event evidence and SRE's actual note. This operation does not inject,
+recover, acknowledge, close, widen permissions or start an SRE thread.
+
+After recovery, a repeated `Fault` additionally requires the previous run's
+individual alert to be `resolved`. Missing, delayed or still-fired evidence
+blocks reinjection, even if the guest is already healthy; otherwise a stateful
+alert could stay active and never create a distinct second incident. This check
+does not force clearance or require acknowledgment.
+
 These implemented gates do not, by themselves, establish that an alert
 automatically started an investigation; verify the actual alert and its linked
-thread on every run. That boundary has now passed once. The investigator is
+thread on every run. That boundary has now passed on two fresh fixtures. The investigator is
 instructed to propose the supplied operator command, never execute it, and to
 distinguish operator, watchdog and injection-error cleanup actors.
 
@@ -316,6 +439,11 @@ arrangement explicitly rather than claiming this integration works.
 - [Arc managed identity authentication](https://learn.microsoft.com/azure/azure-arc/servers/managed-identity-authentication).
 - [Azure Monitor alerts in SRE Agent](https://learn.microsoft.com/azure/sre-agent/azure-monitor-alerts)
   and [incident response plans](https://learn.microsoft.com/azure/sre-agent/incident-response-plans).
+- [Azure Monitor alerts and state](https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-overview#alerts-and-state):
+  stateful log-alert resolution timing is separate from guest recovery.
+- [Get-AzAlert parameters](https://learn.microsoft.com/powershell/module/az.alertsmanagement/get-azalert?view=azps-16.4.0):
+  exact target/rule discovery and the distinction between monitor condition
+  and acknowledgment state.
 - [SRE custom-agent v2 API](https://learn.microsoft.com/azure/sre-agent/tutorial-agent-hooks):
   the documented JSON resource shape is used for the investigator; no hook is
   presented as a pre-execution authorization boundary.
