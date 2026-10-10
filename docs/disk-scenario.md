@@ -528,8 +528,20 @@ as erased.
 - Predictably timed safety observation across reboot; recovery itself was observed.
 - Repeated incident/reset runs and fresh deploy/teardown cycles without hidden
   repairs, then human rehearsal. Provisioning and warm-up are measured separately.
-- Measure and meet a practical presentation duration; the first successful run
-  did not establish the twelve-minute target.
+- **Decided:** split the twelve-minute target instead of forcing it end-to-end.
+  Azure Monitor's stateful log alert needs
+  [ten continuous nonbreaching minutes](https://learn.microsoft.com/azure/azure-monitor/alerts/alerts-overview#alerts-and-state)
+  before automatic resolution — platform behavior, not configurable — so no run
+  can reach full clearance under roughly that floor even with instant recovery.
+  Twelve minutes applies to the **live, presented segment** only: fault through
+  visible guest recovery, which measured 9–11 minutes across runs including
+  demo07 (9m17s). SRE's independently verified recovery/RCA and the automatic
+  monitor clearance are narrated as pending and confirmed afterward, matching
+  the clearance handling in [the runsheet](disk-demo-runsheet.md), not watched
+  live. This does not resolve demo07's own verified-RCA delay (about 18
+  minutes, driven by counter-convergence lag) — that stays open as a
+  reliability gap in [implementation-plan.md](implementation-plan.md)'s "Work
+  remaining" table, not closed by redefining the target.
 - **Decided:** keep the unacknowledged incident boundary in the demo; do not
   widen the SRE identity's role. The exact missing permissions are
   `Microsoft.AlertsManagement/alerts/changestate/action` and
