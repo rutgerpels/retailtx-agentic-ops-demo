@@ -7,6 +7,36 @@ transport before adding a human-approved SRE repair. The optional private
 Azure Monitor intake is now implemented for a fresh isolated fixture, but
 has not passed live acceptance. Approval-free autonomy remains out of scope.
 
+## Monitor transport decision (2026-10-10)
+
+**User-directed baseline:** proceed with public HTTPS Azure Monitor ingestion
+and queries, retaining managed identities, Entra RBAC, disabled local
+authentication and the same Monitor-triggered incident/approval gates. A
+read-only policy review found no assigned LAW/DCE public-access prohibition,
+including inherited management-group assignments. The storage and Key Vault
+public-access restrictions are resource-type specific.
+
+**This is the selected next implementation, not an implemented public switch.**
+The commands below still describe the existing private variant. Do not run
+them expecting a public path, simply change a URL, or enable public access
+on the retained foundation. Public routing/DNS, resource settings, readiness,
+reset and teardown must be implemented and verified together on a fresh fixture.
+The public baseline must prove current AMA ingestion and actual SRE query access
+before any real fault or approval.
+
+AMPLS investigation and a full-private Monitor profile are deferred in
+[the optional private-profile backlog](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/20).
+The failed comparisons below remain evidence, not a root-cause fix. Private
+transport is a later customer-policy/profile gate, not a prerequisite for the
+baseline operational story in this subscription.
+
+The same public Monitor baseline is intended for **future fresh Arc profiles**
+after the native path is verified. Keep the retained working Arc host,
+workspace/private endpoints and attested manifests unchanged until an explicit
+replacement/migration is implemented. Deferring Monitor AMPLS does not remove
+Azure Arc, AMA or Azure Monitor, change the Arc control-plane Private Link Scope,
+or authorize changes to other services' private-endpoint requirements.
+
 ## Azure Monitor intake (implemented, live acceptance pending)
 
 Create a **fresh** fixture with both `-WithSreExecution` and `-WithMonitoring`.

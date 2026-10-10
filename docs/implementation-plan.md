@@ -61,6 +61,32 @@ the separate native-action fixture adds only an exact VM-start grant, without
 changing that agent's Review configuration. No budgets or scheduled expiry are
 configured.
 
+### Current Monitor transport decision (2026-10-10)
+
+The user has selected **public HTTPS ingestion/query as the next baseline**
+for the native service incident, with managed identities, Entra RBAC and
+disabled local authentication preserved. The read-only policy review included
+subscription and inherited management-group assignments and found no assigned
+restriction requiring LAW/DCE public access to be disabled. Storage and Key
+Vault Modify policies remain applicable to those services.
+
+The public baseline is **not implemented or live-verified yet**; the existing
+private variants and their failed native comparisons remain documented below.
+Verify fresh AMA ingestion and the selected SRE query mechanism over the public
+path before continuing the Monitor -> SRE -> human approval -> recovery gate.
+Record transport explicitly in lifecycle/readiness evidence and implement
+reset/teardown with the selected mode; do not weaken authentication or fabricate
+private transport success.
+
+AMPLS troubleshooting/full-private Monitor transport is now a deferred
+[optional-profile Spike](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/20),
+not a baseline release blocker where public access is policy-compatible.
+After the native baseline is verified, apply the same default to **future fresh
+Arc profiles**. Preserve the retained working Arc/private foundation until a
+separately implemented replacement or migration is authorized and verified.
+This decision concerns Monitor data transport only, not Arc onboarding,
+Arc control-plane private networking or other services' policy requirements.
+
 ## 1. Assessment and recommendation
 
 At the initial assessment, the checkout contained only the project brief,
@@ -524,7 +550,8 @@ verified fixture absence, external grant/custom-role cleanup and removal of
 its AMPLS endpoint connection; no owned tagged residuals remained. See
 [live findings](guest-service-scenario.md#first-monitored-live-attempt-readiness-blocked).
 
-Preserve bounded faults, independent cleanup, private telemetry and fixed-action
+Preserve bounded faults, independent cleanup, authenticated telemetry with an
+explicit verified transport mode and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
 Monitor clearance separately without silently replacing the full-flow
