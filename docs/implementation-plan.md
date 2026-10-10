@@ -457,6 +457,17 @@ operation does not yet expose a structured pending-approval state, so
 operators must watch the SRE portal/chat UI itself during the approval step.
 Arc remains recommendation/operator repair, with alert intake and autonomy deferred.
 
+A reusable, code-only repeatability tool
+(`scripts\Invoke-GuestServiceCycleTest.ps1`) now exists to close the remaining
+"only once each" gaps on this scenario: three repeated fault/repair cycles and
+one VM-reboot cycle that must recover via the independent watchdog alone, with
+no operator repair call. It orchestrates the existing `Fault`/`Repair`/`Status`
+operations and the same `az vm restart` pattern used for the disk scenario; it
+adds no new privileged path. It has been written and syntax-validated but not
+yet run against a live VM, so three-cycle repeatability and cross-reboot
+watchdog acceptance remain open until that run happens and its evidence is
+reconciled in [guest-service-scenario.md](guest-service-scenario.md#repeatability-and-reboot-test-wrapper).
+
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic

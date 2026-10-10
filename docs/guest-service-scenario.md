@@ -275,6 +275,37 @@ The harness now uses the authenticated Graph `/me` endpoint. The unused fixture
 was removed rather than rebinding its source attestation; `demo19` supplied the
 live fault/recovery evidence above.
 
+## Repeatability and reboot test wrapper
+
+`scripts\Invoke-GuestServiceCycleTest.ps1` is a code-only orchestration wrapper
+that closes the "three-cycle repeatability" and "cross-reboot watchdog
+acceptance" gaps flagged above. It does not add a new operation: it drives the
+existing `Invoke-GuestService.ps1 Fault`/`Repair`/`Status` operations in a loop,
+and triggers a VM restart (`az vm restart`, the same pattern used by
+`Invoke-DiskScenario.ps1`) to additionally prove watchdog recovery survives a
+guest reboot.
+
+```powershell
+.\scripts\Invoke-GuestServiceCycleTest.ps1 -SubscriptionId $subscription `
+    -EnvironmentName demo16 -Cycles 3 -IncludeRebootCycle -Bootstrap
+```
+
+Each cycle injects a bounded fault, waits for a fresh fault run, collects the
+SRE-equivalent repair attribution via `Repair -RunId`, and verifies healthy
+Status evidence before starting the next cycle; it aborts on the first failed
+cycle rather than masking a partial result. The optional final reboot cycle
+restarts the VM, waits for the watchdog to bring the service back without any
+operator repair call, and verifies `recoveryReason: "reboot"` /
+`recoveredBy: "watchdog"` in the resulting Status evidence. The wrapper emits a
+single structured summary object (`EnvironmentName`, `TotalCycles`, `Success`,
+and a `Cycles` array with per-cycle timings and evidence) rather than narrating
+progress, consistent with the repo's `Write-Verbose`-only console convention.
+
+This tool has been written and syntax-validated but **not yet executed against
+a live VM**. It closes a gap in tooling, not yet a gap in verified evidence;
+the three-cycle/reboot claim remains unverified until it is run and its output
+is reconciled here.
+
 ## Human-approved repair evidence (`demo23`)
 
 The isolated `demo23` fixture repeated the `demo19` proof with the
