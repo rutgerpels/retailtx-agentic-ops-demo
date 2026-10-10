@@ -113,9 +113,17 @@ faster polling shortens it.
 Record setup, fault operation/request, actual pressure, alert, automatic thread,
 proposal, recovery, private verification, SRE RCA, automatic clearance and final
 note separately. Measure both the live recovery segment and the full lifecycle.
-Moving clearance into the walkthrough does not satisfy the existing
-twelve-minute end-to-end acceptance gate. Any revised presentation target must
-be explicitly agreed; neither target is accepted by this runsheet.
+
+**Agreed target (see "Remaining acceptance gates" in
+[disk-scenario.md](disk-scenario.md)):** twelve minutes applies only to the
+live, presented segment — fault through visible guest recovery (measured
+9–11 minutes across runs). Moving the rest of the lifecycle into the
+walkthrough is accepted for the automatic monitor clearance (bound by the
+ten-minute floor above plus convergence; measured 28–30 minutes), because that
+wait is platform-enforced, not a presentation shortcut. It is **not** accepted
+for SRE's independently verified recovery/RCA step, which took about 18
+minutes in the one measured run (demo07) due to counter-convergence lag — that
+is a separate, still-open reliability gap, not satisfied by this target split.
 
 If an Arc mutation times out, treat its outcome as unknown: inspect the same
 command and run evidence, never resubmit blindly. If SRE verification errors,
