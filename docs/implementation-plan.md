@@ -4,7 +4,14 @@
 [native SRE VM-start proof](native-action-proof.md) now verifies native approval,
 denial, managed-identity execution and private Arc evidence, with three
 consecutive automated recoveries and incident notes. Human rehearsal and the
-complete approved-incident gate remain open. Stage 1 local transaction slice implemented and locally verified; see the
+complete approved-incident gate remain open. A separate disposable
+[guest-service repair fixture](guest-service-scenario.md) (`demo23`,
+2026-10-09, PR #9) verified a narrower human-approved native-repair gate: SRE
+proposed the exact repair command, a human approver verified it byte-for-byte
+against the portal's pending card before clicking Approve, and guest evidence
+plus an independent Activity Log query agreed on exactly one gated
+invocation. This used its own isolated VM/action identity and does not by
+itself satisfy the complete approved-incident/customer gate above. Stage 1 local transaction slice implemented and locally verified; see the
 [local guide](local-development.md) for commands, evidence, and limitations.
 Stage 2 private Azure application profile implemented, but live acceptance is
 blocked by Arc command delivery. Evidence and the reliability assessment are
