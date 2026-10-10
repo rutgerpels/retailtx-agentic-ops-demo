@@ -523,6 +523,53 @@ generation's evidence.
 Historical Monitor records and Azure deployment/audit history are not claimed
 as erased.
 
+## Repeated same-fixture incident cycle, 2026-10-10
+
+`demo24` is a distinct fixture (its own resource group and VM, separate from
+demo05/06/07) that was deployed once and then reused for repeated incident
+cycles rather than torn down between runs; its state file records
+`probeCount: 3` and `phase: "armed"` at last check. This entry documents the
+third of those cycles, run without a human presenter, extending the same-fixture
+repeat pattern already established on demo05 rather than demonstrating a fresh
+deploy/teardown cycle.
+
+| Milestone | UTC and evidence |
+| --- | --- |
+| Fault request | 09:49:32.093 (run `01995be3-aeac-478d-b1f4-7c3f3856e3b9`) |
+| Guest-observed pressure | 09:51:15.284, 8% free on disposable `R:`, IIS 200, watchdog 09:48:58.403 |
+| Alert fired | 09:55:41.928 (Sev2, data volume below 10 percent free) |
+| SRE discovery snapshot | 09:57:44.726, status `new`, `monitorCondition: Fired`, `acknowledgementState: AuthorizationBlocked` |
+| First recover command submitted | 10:00:28 |
+| Guest-side actual recovery | 10:01:14.333, approximately 46 seconds after the first command and before the second was issued |
+| Second recover command submitted | 10:02:50; Azure-side executed 10:03:17.232-10:03:38.029, `provisioningState: Succeeded`, `exitCode: 0` |
+| Verified healthy | 10:03:36.917, 99.43% free, IIS 200, fresh watchdog 10:03:00.719, `recoveryActor: operator-script`, same `recoveredAt` as the guest-side recovery above |
+| SRE re-check | 10:04:36.283, status still `new`/`Fired`, `acknowledgementState: AuthorizationBlocked` |
+
+Fault request to guest recovery was **11 minutes 42 seconds**; fault request to
+the final SRE re-check was **15 minutes 4 seconds**. Both remain consistent with
+prior runs and do not reopen the twelve-minute end-to-end split already settled
+above.
+
+The first recover command's result was not yet visible at 10:00:31, when
+tooling logged: "Arc command result is not visible yet; waiting for the same
+command, not resubmitting:
+/subscriptions/de4195ac-.../runCommands/recover-d139faf8a6664c0d8427447b5df2d575."
+Guest-side evidence shows that command had already begun executing and
+completed recovery roughly 46 seconds after submission, before the second,
+idempotent command was issued at 10:02:50 — the delay was in result
+visibility, not guest execution. The second command's output reported the
+same `recoveredAt` timestamp as a re-report, not a new recovery event. This is
+read as supporting evidence for reliable Arc guest-command delivery, not proof
+that the first command never ran.
+
+Acknowledgment state was `AuthorizationBlocked` across every snapshot in this
+run, consistent with the pattern already confirmed on demo05 and demo07. This
+cycle does not by itself satisfy the fresh deploy/reset/teardown gate: the
+fixture was reused across three incident cycles rather than redeployed between
+them, and it remained `armed`, not torn down, at last check. It is also not a
+human-presented rehearsal. Raw fault, discovery and recovery evidence for all
+three cycles remains under ignored `.azure\demo24`.
+
 ## Remaining acceptance gates
 
 - Predictably timed safety observation across reboot; recovery itself was observed.
