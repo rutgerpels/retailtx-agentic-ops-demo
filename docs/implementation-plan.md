@@ -491,6 +491,25 @@ live-verified**: private SRE query support with alternate execution channels
 denied and the full alert/approval/recovery/reset/teardown flow remain acceptance
 gates. See [the native guide](guest-service-scenario.md#azure-monitor-intake-implemented-live-acceptance-pending).
 
+The user-authorized diagnostic variant, `Up -WithSreExecution -WithMonitoring
+-WithIsolatedMonitoring`, provisions a disposable private LAW/DCE/AMPLS instead
+of using the retained foundation. DNS checks reject duplicate/foreign Monitor
+namespaces linked to either fixture VNet. Down unlinks and permanently deletes
+only that owned workspace. This comparison is not a requirement for one workspace
+per VM, a shared-foundation fix or incident acceptance; see
+[the diagnostic boundary](guest-service-scenario.md#isolated-private-monitoring-diagnostic).
+
+**2026-10-10 isolated comparison (`demo27`): same readiness failure.** A new
+owned private LAW/DCE/AMPLS did not avoid query `PrivateLinkValidationFailedError`
+or AMA Syslog-upload HTTP 403. Post-deployment checks attested ten unique owned
+DNS links across the two fixture VNets, correct endpoint NIC addresses and the
+new workspace/AMPLS backlink. The retained Arc private path still returned
+current telemetry. Duplicate same-service DNS zones linked to these VNets were
+not found; the underlying rejection remains unresolved. No fault or incident
+acceptance was attempted. The disposable workspace was purged and checked
+against active/recoverable inventories; resumed Down and repeated absence
+verification removed the fixture and its owned grants/custom role completely.
+
 **2026-10-10 live attempt (`demo26`): blocked at private telemetry readiness.**
 The fresh VM/SRE and monitoring deployments succeeded; local Syslog
 observations and AMA collection configuration were present. Private query

@@ -132,6 +132,78 @@ The next incident attempt must first obtain a fresh private query receipt and
 prove Syslog ingestion. Do not arm the alert or replace private validation with
 public access, different identities or an operator-created investigation.
 
+### Isolated private-monitoring diagnostic
+
+For the user-authorized comparison with a fresh monitoring foundation, add
+`-WithIsolatedMonitoring` to **Up only**, alongside `-WithMonitoring` and
+`-WithSreExecution`. The selection is immutable for that fixture. This creates
+an owned LAW, DCE and AMPLS in the disposable fixture group rather than attaching
+its endpoint to the retained foundation:
+
+```powershell
+.\scripts\Invoke-GuestService.ps1 Up -SubscriptionId $subscription -EnvironmentName $environment -WithSreExecution -WithMonitoring -WithIsolatedMonitoring
+.\scripts\Invoke-GuestService.ps1 Monitor -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Telemetry -SubscriptionId $subscription -EnvironmentName $environment
+# This diagnostic does not require a fault, response plan or repair approval.
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+```
+
+Both modes retain private-only query/ingestion and Entra authentication.
+The diagnostic checks relevant subscription-wide DNS zones and links for
+duplicate or foreign Monitor namespaces attached to either fixture VNet;
+ununrelated zones linked elsewhere are allowed. Existing deployment-target links
+are ownership-checked even when they currently point to another VNet. A complete
+ten-link topology is required after deployment. Inspect the saved DNS topology
+and actual query/ingestion results rather than inferring correctness from a
+private address alone. A successful isolated query would narrow the comparison,
+not establish the root cause of the earlier shared-path rejection.
+
+**Destructive cleanup boundary:** isolated Down validates the owned AMPLS
+bindings, disconnects its workspace/DCE and **permanently deletes** the exact
+fixture-owned workspace instead of retaining it in soft deletion. This applies
+only to the explicitly disposable isolated mode; retained foundation monitoring
+is never purged. A partial creation intent must be cleaned up with Down, not
+replayed or adopted. Local receipts remain after teardown.
+
+**2026-10-10, `demo27`: isolated comparison also blocked.** The fresh private
+LAW/DCE/AMPLS and AMA/DCR/disabled-alert deployment succeeded. A post-deployment
+subscription-wide topology check found exactly ten owned DNS links: one link
+for each of the five required namespaces on each fixture VNet, with no duplicate
+or foreign same-namespace links. Query resolved to the owned endpoint NIC's
+`10.89.0.11`, and this new workspace's ODS hostname to `10.89.0.6`. The workspace
+backlink matched its new AMPLS scope ID; the endpoint was Approved / Succeeded.
+Public query/ingestion remained disabled and local authentication disabled.
+
+Nevertheless, both query hostnames returned the same HTTP 403 /
+`PrivateLinkValidationFailedError`, now naming the **new** workspace. AMA logged
+403 for both `LINUX_SYSLOGS_BLOB` and `HEALTH_ASSESSMENT_BLOB` uploads between
+`19:55:58Z` and `19:58:11Z`; its configuration targeted the new workspace and
+private DCE. The independent observer emitted current healthy service/watchdog
+evidence locally. No private telemetry receipt, fault, response plan, incident
+thread or approval was produced.
+
+During the comparison, the retained Arc host still returned fresh private
+Perf/Event evidence through its original `10.84.1.10` endpoint (`19:49:59Z`),
+without configuration or fault changes. The fresh-workspace experiment therefore
+did **not** solve the rejection, and duplicate same-service DNS zones linked to
+the fixture VNets were not observed. This does not establish the underlying
+private-link rejection cause; do not infer a workspace-wide outage or compensate
+with public access or broader permissions.
+
+**Cleanup verified:** the workspace purge returned successfully and independent
+active/recoverable workspace inventories contained no matching workspace.
+The initial group deletion exceeded its bounded wait and reported the remaining
+owned resources without claiming success. Resuming the recorded Down completed
+at `20:14:35Z`; another Down at `20:15:54Z` verified absence again. Independent
+readback found no owned tagged resources, workspace grants or custom action role.
+The isolated workspace, DCE, AMPLS, endpoint, DNS, VM and agent are removed.
+
+Focused local regression checks are `tests\Test-GuestMonitorIsolation.ps1`,
+`tests\Test-GuestServiceMonitor.ps1` and `tests\Test-GuestService.ps1`. They cover
+ownership/privacy boundaries and partial/repeated cleanup, not successful live
+ingestion or incident acceptance.
+
 The fixture represents a posting worker, not the actual RetailTx ERP ledger,
 Service Bus pipeline or business recovery. Do not infer customer impact from
 its localhost health or worker progress.
