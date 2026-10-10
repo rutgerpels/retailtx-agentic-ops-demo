@@ -530,9 +530,19 @@ as erased.
   repairs, then human rehearsal. Provisioning and warm-up are measured separately.
 - Measure and meet a practical presentation duration; the first successful run
   did not establish the twelve-minute target.
-- Decide the minimum scoped acknowledgment permission or explicitly keep the
-  unacknowledged incident boundary in the demo. Investigation, recovery evidence
-  and automatic monitor-condition clearance already worked without widening it.
+- **Decided:** keep the unacknowledged incident boundary in the demo; do not
+  widen the SRE identity's role. The exact missing permissions are
+  `Microsoft.AlertsManagement/alerts/changestate/action` and
+  `Microsoft.AlertsManagement/alerts/read`; the only built-in role that grants
+  them is **Monitoring Contributor**, which also grants unrelated write access
+  (alert rules, action groups, diagnostic settings, Log Analytics config) and
+  does not fit this project's least-privilege precedent. Investigation,
+  recovery evidence and automatic monitor-condition clearance already worked
+  without widening the role, so the narrative explicitly states "unacknowledged
+  by design" rather than fabricating closure. If a future run wants the alert
+  to show closed, add a custom role scoped to only those two actions
+  (following the pattern in `infra/native-action.bicep`), not Monitoring
+  Contributor.
 - Verify the post-recovery conversation flow with a human operator; the first
   proof used follow-up messages to request SRE verification and its final note.
 

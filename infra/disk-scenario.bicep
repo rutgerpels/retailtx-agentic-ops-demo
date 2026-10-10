@@ -89,6 +89,11 @@ resource bootstrap 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b64e21ea-ac4e-4cdf-9dc9-5b892992bee7')
   }
 }
+// Intentionally Reader-only: acknowledgment/changestate on alerts needs
+// Microsoft.AlertsManagement/alerts/changestate/action, which only the
+// broad built-in Monitoring Contributor grants. Decision is to keep the
+// incident unacknowledged by design rather than widen the role. See
+// "Remaining acceptance gates" in docs/disk-scenario.md.
 resource reader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, agentPrincipalId, 'reader')
   properties: {
