@@ -10,7 +10,8 @@ import subprocess
 import sys
 
 FILES = ("controller.py", "bootstrap.py", "worker.py", "retailtx-demo-posting-worker.service",
-         "retailtx-guest-watchdog.service", "retailtx-guest-watchdog.timer")
+         "retailtx-guest-watchdog.service", "retailtx-guest-watchdog.timer",
+         "retailtx-guest-observer.service", "retailtx-guest-observer.timer")
 
 
 def safe_directory(path, mode):
@@ -67,13 +68,16 @@ def main():
         install_exact(path, content, 0o644)
     subprocess.run(["/usr/bin/systemctl", "daemon-reload"], check=True, timeout=20)
     subprocess.run(["/usr/bin/systemctl", "enable", "retailtx-demo-posting-worker.service",
-                    "retailtx-guest-watchdog.timer"], check=True, timeout=20, capture_output=True)
+                    "retailtx-guest-watchdog.timer", "retailtx-guest-observer.timer"],
+                   check=True, timeout=20, capture_output=True)
     subprocess.run(["/usr/bin/systemctl", "start", "retailtx-guest-watchdog.timer"],
                    check=True, timeout=20)
     request = {"action": "configure", "ownerToken": config["ownerToken"],
                "sourceHashes": config["sourceHashes"]}
     encoded = base64.b64encode(json.dumps(request).encode()).decode()
     subprocess.run(["/usr/bin/python3", str(root / "controller.py"), encoded], check=True, timeout=40)
+    subprocess.run(["/usr/bin/systemctl", "start", "retailtx-guest-observer.timer"],
+                   check=True, timeout=20)
 
 
 if __name__ == "__main__":

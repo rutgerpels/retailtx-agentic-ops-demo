@@ -6,6 +6,7 @@ param ownerToken string
 param expiresAt string
 param adminSshPublicKey string
 param agentPrincipalId string
+param withMonitoring bool = false
 
 var tags = {
   demo: 'retailtx'
@@ -31,6 +32,7 @@ module fixture 'guest-service-target.bicep' = {
     tags: tags
     adminSshPublicKey: adminSshPublicKey
     agentPrincipalId: agentPrincipalId
+    withMonitoring: withMonitoring
   }
 }
 

@@ -475,6 +475,22 @@ acceptance are now verified, not just tooled; see
 for the full per-cycle evidence table. The `demo25` fixture was torn down
 afterward.
 
+**Next authorized gate: native Azure Monitor intake.** The user has approved
+making service-down incidents Monitor-triggered before the full demo, rather
+than treating monitoring as optional because the original fixture was minimal.
+`Up -WithSreExecution -WithMonitoring` now prepares a fresh monitored native
+variant; Monitor/Telemetry/Connect/Arm/Incident lifecycle operations add private
+Syslog observations, an exact-VM stateful alert and isolated Review routing.
+The existing exact-command adapter can continue the alert-created thread with
+`-IncidentThreadId`, preserving human portal approval and action-identity audit.
+Readiness and subsequent faults reject missing/stale/wrong-run evidence;
+reset waits for previous Monitor clearance and archives approval receipts;
+Down removes recorded external query grants and owned infrastructure without
+changing the retained foundation/shared agent. This is **implemented, not
+live-verified**: private SRE query support with alternate execution channels
+denied and the full alert/approval/recovery/reset/teardown flow remain acceptance
+gates. See [the native guide](guest-service-scenario.md#azure-monitor-intake-implemented-live-acceptance-pending).
+
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
@@ -486,6 +502,13 @@ acceptance gate.
 **Status: design clarified and mechanism identified by documentation research
 (2026-10-11); not yet built or live-verified. Still independent of the faster
 Arc/native-VM fault experiments above and must not delay them.**
+
+**Latest direction supersedes the fallback-only framing below:** verify the
+native Monitor-triggered variant first. The GitHub issue will then be a human
+report alongside that alert, correlated to its existing investigation rather
+than replacing Monitor or creating a duplicate. HTTP-trigger/OIDC intake and
+comment-back remain unbuilt; the historical design below is not authorization
+to omit monitoring from the final demo.
 
 Two decisions narrow this scenario from the earlier "parked, unverified
 connector" framing:
@@ -582,10 +605,10 @@ in `guest-service-scenario.md` (Azure Monitor Agent can watch a Linux process
 via a custom-log/syslog pattern — a service-down watchdog line collected by AMA
 and fired by a scheduled-query alert — the same pattern already proven in
 [`infra/disk-monitor.bicep`](../infra/disk-monitor.bicep) for disk capacity).
-Deliberately not pursued now: `guest-service-scenario.md` is unmonitored by
-design, and bolting a new monitoring pipeline onto it would blur that fixture's
-purpose as the human-reported-intake contrast case. Track as its own future
-scenario/Spike, not a prerequisite for this one.
+This is now the authorized next gate, not deferred: the original fixture stays
+available for its narrower proof, while a fresh opt-in monitored variant must
+pass live acceptance before the full demo. The GitHub report should correlate
+with Monitor intake; it is not justification to keep final incidents unmonitored.
 
 ## 6. Deployment, reset, and teardown are product features
 
