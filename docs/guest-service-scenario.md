@@ -239,6 +239,17 @@ repair, cross-reboot watchdog acceptance, three-cycle repeatability or retail
 transaction recovery is claimed. The health gate checks the named systemd process and expected localhost JSON;
 it does not verify worker progress, ERP ledger writes or Service Bus recovery.
 
+**Planned reuse — GitHub-issue intake scenario.** This fixture's stopped
+posting-worker fault is the designated fixture for the separate
+"GitHub-reported incident to SRE recommendation" scenario (see
+`docs/implementation-plan.md`): a user-filed GitHub issue describing the
+stopped service, relayed to SRE through an HTTP trigger, rather than Azure
+Monitor. That reuse is design-only and not yet built. It is a deliberate
+contrast/fallback intake path, not a replacement for the standing goal that
+every incident should eventually be triggered by Azure Monitor; this fixture
+still has zero monitoring by design, and no Monitor-based trigger work is
+implied or required for this gap.
+
 Teardown rejects unexpected child resources before deleting the owned group.
 The sole untagged exception is the exact VM-child `AzurePolicyforLinux`
 extension with its ARM publisher/type verified. Pending repair/reset readback
