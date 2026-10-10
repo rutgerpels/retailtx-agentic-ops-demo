@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $root = Split-Path -Parent $PSScriptRoot
 Import-Module (Join-Path $root 'scripts\Azure.Common.psm1') -Force
+. (Join-Path $root 'scripts\guest\GuestMonitor.ps1')
 $errors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile(
     (Join-Path $root 'scripts\Invoke-GuestService.ps1'), [ref]$null, [ref]$errors)
@@ -574,6 +575,30 @@ Assert-GuestManifest
 Assert-GuestReader
 Assert-GuestExecutionAgent
 $script:checks++
+$script:state.withMonitoring = $true
+$script:state.workspaceId = "$groupId/providers/Microsoft.OperationalInsights/workspaces/test-workspace"
+$script:state.monitorAccess = @{}
+$queryRole = "/subscriptions/$subscription/providers/Microsoft.Authorization/roleDefinitions/73c42c96-874c-492b-b04d-ab87d138a893"
+foreach ($name in @('action', 'system')) {
+    $principal = if ($name -ceq 'action') { $script:state.agentPrincipalId } else { $script:state.systemPrincipalId }
+    $grantName = [guid]::NewGuid().ToString()
+    $grant = @{ name = $grantName; id = "$($script:state.workspaceId)/providers/Microsoft.Authorization/roleAssignments/$grantName"
+        principalId = $principal }
+    $script:state.monitorAccess[$name] = $grant
+    $assignment = @{ id = $grant.id; scope = $script:state.workspaceId; principalId = $principal; roleDefinitionId = $queryRole }
+    if ($name -ceq 'action') { $script:executionAssignments += $assignment } else { $script:executionSystemAssignments += $assignment }
+}
+Assert-GuestExecutionAgent
+$script:checks++
+$script:executionSystemAssignments[1].roleDefinitionId = $readerRole
+Assert-Rejected { Assert-GuestExecutionAgent }
+$script:executionSystemAssignments[1].roleDefinitionId = $queryRole
+$script:executionAssignments[3].id = 'foreign-workspace-grant'
+Assert-Rejected { Assert-GuestExecutionAgent }
+$script:executionAssignments = @($script:executionAssignments[0..2])
+$script:executionSystemAssignments = @($script:executionSystemAssignments[0])
+$script:state.withMonitoring = $false
+$script:state.Remove('monitorAccess')
 $script:executionSubnet.delegations = @(@{ properties = @{ serviceName = 'Microsoft.App/environments' } })
 Assert-GuestExecutionNetwork -SubnetId $script:state.sreSubnetId
 $script:checks++

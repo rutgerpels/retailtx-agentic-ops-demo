@@ -10,6 +10,7 @@ import re
 import stat
 import subprocess
 import sys
+import syslog
 import time
 from datetime import datetime, timezone
 from urllib.request import urlopen
@@ -21,7 +22,8 @@ TIMER = "retailtx-guest-watchdog.timer"
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 HASH = re.compile(r"^[0-9a-f]{64}$")
 FILES = ("controller.py", "bootstrap.py", "worker.py", "retailtx-demo-posting-worker.service",
-         "retailtx-guest-watchdog.service", "retailtx-guest-watchdog.timer")
+         "retailtx-guest-watchdog.service", "retailtx-guest-watchdog.timer",
+         "retailtx-guest-observer.service", "retailtx-guest-observer.timer")
 
 
 def utc(value=None):
@@ -248,28 +250,37 @@ def evidence(config, state):
         "sourceHashes": config["sourceHashes"],
     }
 
+def observe(config, state):
+    receipt = evidence(config, state)
+    receipt.pop("sourceHashes")
+    receipt["bootId"] = boot_id()
+    syslog.openlog("RetailTxGuest", syslog.LOG_PID, syslog.LOG_LOCAL0)
+    syslog.syslog(syslog.LOG_INFO, json.dumps(receipt, separators=(",", ":")))
+
 
 def main():
     if os.geteuid() != 0:
         raise ValueError("Root execution required")
     config = attest()
-    descriptor = os.open(DATA / "controller.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(descriptor, "w") as lock:
+    observer_call = sys.argv[1:] == ["--observe"]
+    flags = os.O_RDONLY | os.O_NOFOLLOW if observer_call else os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
+    descriptor = os.open(DATA / "controller.lock", flags, 0o600)
+    with os.fdopen(descriptor, "r" if observer_call else "w") as lock:
         protected(DATA / "controller.lock")
         watchdog_call = sys.argv[1:] == ["--watchdog"]
         for attempt in range(11):
             try:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock, (fcntl.LOCK_SH if observer_call else fcntl.LOCK_EX) | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
-                if watchdog_call:
+                if watchdog_call or observer_call:
                     return  # The recurring timer retries without queuing duplicate recovery commands.
                 if attempt == 10:
                     raise ValueError("Fixture command already active")
                 time.sleep(0.5)
-        if not watchdog_call and len(sys.argv) != 2:
+        if not watchdog_call and not observer_call and len(sys.argv) != 2:
             raise ValueError("One fixed encoded request required")
-        request = None if watchdog_call else json.loads(base64.b64decode(sys.argv[1], validate=True))
+        request = None if watchdog_call or observer_call else json.loads(base64.b64decode(sys.argv[1], validate=True))
         path = DATA / "state.json"
         if path.exists():
             state = load(path)
@@ -283,6 +294,8 @@ def main():
             raise ValueError("State ownership mismatch")
         if watchdog_call:
             watchdog(state)
+        elif observer_call:
+            observe(config, state)
         else:
             execute(request, config, state)
             print("RETAILTX_GUEST=" + json.dumps(evidence(config, state), separators=(",", ":")))

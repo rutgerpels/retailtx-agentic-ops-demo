@@ -1,0 +1,11 @@
+[Unit]
+Description=RetailTx fresh service observations independent of recovery
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+Unit=retailtx-guest-observer.service
+
+[Install]
+WantedBy=timers.target

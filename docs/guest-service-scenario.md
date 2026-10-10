@@ -3,8 +3,90 @@
 **Scope:** a stopped application service inside a running native Azure VM,
 not VM start and not the Arc-managed host. Service Bus work remains parked.
 This first gate proves a small guest fixture and the Azure VM Agent command
-transport before adding a human-approved SRE repair. Alert intake and autonomy
-are later gates.
+transport before adding a human-approved SRE repair. The optional private
+Azure Monitor intake is now implemented for a fresh isolated fixture, but
+has not passed live acceptance. Approval-free autonomy remains out of scope.
+
+## Azure Monitor intake (implemented, live acceptance pending)
+
+Create a **fresh** fixture with both `-WithSreExecution` and `-WithMonitoring`.
+Do not retrofit source-attested proof fixtures or reuse their approval receipts.
+The new opt-in provisions a system identity, private AMA/DCR Syslog collection,
+an initially disabled stateful alert and an exact-VM Review response plan.
+The shared SRE Agent is not reconfigured or granted guest-write authority.
+
+An independent thirty-second observer reads the attested service/localhost
+health and emits bounded `RetailTxGuest` JSON in local0/Info Syslog. It does not
+repair anything or write the fault state. The existing watchdog retains sole
+deadline/reboot safety responsibility. The alert selects the **latest source
+observation**, not ingestion arrival order, for the exact VM and owner, and
+requires a fresh active non-canary stopped-service fault before its deadline.
+Missing telemetry is unknown, not a healthy result or a fabricated service-down
+incident. The short safety canary deliberately does not trigger this alert.
+
+Private DNS, an AMPLS private endpoint and the two guest/agent peerings are
+fixture-owned. The retained workspace, DCE and AMPLS stay private-only and
+are never deleted. Query-only workspace grants for the VM, alert and isolated
+agent identities are recorded before creation, validated and removed on Down.
+Private readiness queries use the VM system identity via an explicitly
+operator-run diagnostic command; they are not SRE guest execution.
+
+```powershell
+$subscription = '<subscription-guid>'
+$environment = 'demo01' # Select an unused neutral environment.
+.\scripts\Invoke-GuestService.ps1 Up -SubscriptionId $subscription -EnvironmentName $environment -WithSreExecution -WithMonitoring
+.\scripts\Invoke-GuestService.ps1 Monitor -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Telemetry -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Fault -SubscriptionId $subscription -EnvironmentName $environment -Canary
+# Wait for watchdog recovery, then require fresh Status and healthy Telemetry.
+.\scripts\Invoke-GuestService.ps1 Status -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Connect -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Arm -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Fault -SubscriptionId $subscription -EnvironmentName $environment -FaultDurationSeconds 600
+.\scripts\Invoke-GuestService.ps1 Incident -SubscriptionId $subscription -EnvironmentName $environment
+```
+
+Wait for the **automatically created** investigation identified by Incident;
+do not use `Invoke-GuestServiceSre.ps1 Investigate` or create a substitute thread.
+After it becomes idle, collect a fresh Status receipt and supply the existing
+exact-command proposal adapter with that incident's thread ID:
+
+```powershell
+.\scripts\Invoke-GuestService.ps1 Status -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestServiceApproval.ps1 Propose -SubscriptionId $subscription -EnvironmentName $environment -IncidentThreadId '<verified-incident-thread-guid>'
+.\scripts\Invoke-GuestServiceApproval.ps1 Read -SubscriptionId $subscription -EnvironmentName $environment
+# A human checks the exact command and clicks Approve in the SRE portal.
+.\scripts\Invoke-GuestServiceApproval.ps1 Verify -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Telemetry -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Incident -SubscriptionId $subscription -EnvironmentName $environment
+# After Monitor is Resolved, reset and archive this run's approval receipts.
+.\scripts\Invoke-GuestService.ps1 Reset -SubscriptionId $subscription -EnvironmentName $environment -RunId '<current-run-guid>'
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+```
+
+The operator adapter supplies the exact proposal **in the alert-created thread**;
+it does not initiate investigation or approve execution. A stale/wrong-run
+thread, altered command or recovered/expired fault is rejected. Approval is
+still human-only and VM-scoped privileged scripting, not a service-only enforced
+permission. Before another real fault, fresh healthy telemetry and resolution
+of the previous alert are required. Reset can restore the service while alert
+clearance remains pending; it reports that incomplete reset explicitly.
+
+**Live gates remain:** private Syslog delivery/agent configuration; automatic
+alert-to-thread routing; the isolated SRE read tools' access to private Syslog
+with alternate execution channels denied; human-approved execution in that
+same thread; independent action-identity audit and fresh same-run recovery;
+Monitor clearance; repeatable reset/reboot/teardown. None is inferred from
+local tests, Bicep compilation or the older demo23/demo25 evidence. If private
+SRE reads fail, report the boundary rather than enable terminals or broaden
+permissions. Measure alert latency, application recovery, SRE confirmation and
+automatic clearance separately. The incident remains unacknowledged by design.
+
+References: [AMA installation and identity](https://learn.microsoft.com/azure/azure-monitor/agents/azure-monitor-agent-manage),
+[Syslog collection](https://learn.microsoft.com/azure/azure-monitor/vm/data-collection-syslog),
+[Monitor private-link configuration](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-configure)
+and [DCE requirements](https://learn.microsoft.com/azure/azure-monitor/data-collection/data-collection-endpoint-overview).
 
 The fixture represents a posting worker, not the actual RetailTx ERP ledger,
 Service Bus pipeline or business recovery. Do not infer customer impact from
@@ -233,22 +315,23 @@ to SRE's final recovery note was approximately 10m05s. Operator orchestration an
 the verification correction account for part of this interval; it is not a
 measured autonomous or presentation time.
 
-This is a promising replacement for VM-start-only demonstrations, **not yet an
-autonomous scenario**. No alert-triggered investigation, direct SRE guest
-repair, cross-reboot watchdog acceptance, three-cycle repeatability or retail
-transaction recovery is claimed. The health gate checks the named systemd process and expected localhost JSON;
+This initial demo19 proof is a promising replacement for VM-start-only
+demonstrations, **not an autonomous scenario**. Later demo23 and demo25 proofs
+below establish human-approved repair and repeatability/reboot safety.
+Alert-triggered investigation and retail transaction recovery remain unverified.
+The health gate checks the named systemd process and expected localhost JSON;
 it does not verify worker progress, ERP ledger writes or Service Bus recovery.
 
 **Planned reuse — GitHub-issue intake scenario.** This fixture's stopped
 posting-worker fault is the designated fixture for the separate
 "GitHub-reported incident to SRE recommendation" scenario (see
 `docs/implementation-plan.md`): a user-filed GitHub issue describing the
-stopped service, relayed to SRE through an HTTP trigger, rather than Azure
-Monitor. That reuse is design-only and not yet built. It is a deliberate
-contrast/fallback intake path, not a replacement for the standing goal that
-every incident should eventually be triggered by Azure Monitor; this fixture
-still has zero monitoring by design, and no Monitor-based trigger work is
-implied or required for this gap.
+stopped service, relayed to SRE through an HTTP trigger. That reuse is design-only
+and not yet built. By the latest user direction, the monitored native variant
+above must be verified before the full demo; the issue supplies a human report
+alongside the Monitor alert and must correlate rather than duplicate its
+investigation. The original unmonitored proof remains a narrower transport/
+approval fixture, not the final incident demo.
 
 Teardown rejects unexpected child resources before deleting the owned group.
 The sole untagged exception is the exact VM-child `AzurePolicyforLinux`

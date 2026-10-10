@@ -10,6 +10,7 @@ Writes durable intent before commands. A timeout is an unknown outcome, not a
 failed guest action; use Status for exact readback, or Down for safe disposal.
 .PARAMETER Operation
 Up, Status, Fault, Repair, Reset, or Down.
+Monitor, Telemetry, Connect, Arm and Incident manage optional private monitoring.
 .PARAMETER SubscriptionId
 Explicit authorized subscription, bound to the retained foundation tenant.
 .PARAMETER EnvironmentName
@@ -26,6 +27,8 @@ Status to verify watchdog recovery before attempting a longer fault.
 .PARAMETER WithSreExecution
 On Up only, create a separate Review-mode SRE Agent and UAMI in the fixture
 resource group, with VM-scoped Run Command permission and isolated VNet.
+.PARAMETER WithMonitoring
+On Up only, prepare private AMA monitoring. Requires WithSreExecution.
 .EXAMPLE
 .\scripts\Invoke-GuestService.ps1 Up -SubscriptionId <guid>
 .EXAMPLE
@@ -36,14 +39,15 @@ One JSON-safe status object with state, groupExists, powerState, and evidence.
 [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Medium')]
 param(
     [Parameter(Mandatory, Position = 0)]
-    [ValidateSet('Up', 'Status', 'Fault', 'Repair', 'Reset', 'Down')][string]$Operation,
+    [ValidateSet('Up', 'Status', 'Fault', 'Repair', 'Reset', 'Down', 'Monitor', 'Telemetry', 'Connect', 'Arm', 'Incident')][string]$Operation,
     [Parameter(Mandatory)][guid]$SubscriptionId,
     [string]$EnvironmentName = 'demo16',
     [string]$FoundationEnvironment = 'stage0',
     [ValidateRange(120, 600)][int]$FaultDurationSeconds = 300,
     [guid]$RunId,
     [switch]$Canary,
-    [switch]$WithSreExecution
+    [switch]$WithSreExecution,
+    [switch]$WithMonitoring
 )
 
 Set-StrictMode -Version Latest
@@ -55,6 +59,9 @@ Assert-Stage0Name $FoundationEnvironment
 if ($EnvironmentName -ceq $FoundationEnvironment) { throw 'Fixture must not reuse the foundation environment.' }
 if ($Canary -and $Operation -cne 'Fault') { throw 'Canary applies only to Fault.' }
 if ($WithSreExecution -and $Operation -cne 'Up') { throw 'WithSreExecution applies only to Up.' }
+if ($WithMonitoring -and ($Operation -cne 'Up' -or -not $WithSreExecution)) {
+    throw 'WithMonitoring requires Up with WithSreExecution.'
+}
 if ($PSBoundParameters.ContainsKey('RunId') -and $Operation -cnotin @('Repair', 'Reset')) {
     throw 'RunId applies only to exact-run Repair and Reset.'
 }
@@ -69,7 +76,10 @@ $vmName = "vm-retailtx-guest-$EnvironmentName"
 $vmId = "$groupId/providers/Microsoft.Compute/virtualMachines/$vmName"
 $script:state = $null
 $guestFiles = @('controller.py', 'bootstrap.py', 'worker.py', 'retailtx-demo-posting-worker.service',
-    'retailtx-guest-watchdog.service', 'retailtx-guest-watchdog.timer')
+    'retailtx-guest-watchdog.service', 'retailtx-guest-watchdog.timer',
+    'retailtx-guest-observer.service', 'retailtx-guest-observer.timer')
+. (Join-Path $PSScriptRoot 'disk\DiskSre.ps1')
+. (Join-Path $PSScriptRoot 'guest\GuestMonitor.ps1')
 
 function Invoke-Azure {
     param([Parameter(Mandatory)][string[]]$Arguments, [int]$TimeoutSeconds = 180)
@@ -89,7 +99,9 @@ function Get-ArtifactHash {
     foreach ($relative in @('scripts\Invoke-GuestService.ps1', 'infra\guest-service.bicep',
         'infra\guest-service-target.bicep', 'infra\guest-service-agent.bicep',
         'infra\guest-service-agent-target.bicep', 'scripts\Invoke-GuestServiceApproval.ps1',
-        'scripts\Azure.Common.psm1', 'scripts\Stage0.Common.psm1')) {
+        'scripts\Azure.Common.psm1', 'scripts\Stage0.Common.psm1',
+        'scripts\guest\GuestMonitor.ps1', 'scripts\guest\query.py',
+        'infra\guest-service-monitor.bicep', 'scripts\disk\DiskSre.ps1')) {
         $hashes[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     return $hashes
@@ -109,6 +121,11 @@ function Assert-GuestManifest {
     if (-not $script:state.ContainsKey('withSreExecution') -and $script:state.schemaVersion -eq 1) {
         $script:state.withSreExecution = $false
     }
+    if (-not $script:state.ContainsKey('withMonitoring')) { $script:state.withMonitoring = $false }
+    if ($script:state.withMonitoring -isnot [bool] -or
+        ($script:state.withMonitoring -and -not $script:state.withSreExecution)) {
+        throw 'Invalid monitoring mode or missing isolated execution identity.'
+    }
     if ($script:state.schemaVersion -notin @(1, 2) -or $script:state.profile -cne 'guest-service' -or
         $script:state.subscriptionId -ine $subscription -or $script:state.tenantId -ine $account.tenantId -or
         $script:state.environmentName -cne $EnvironmentName -or $script:state.location -cne $location -or
@@ -116,6 +133,7 @@ function Assert-GuestManifest {
         throw 'Guest-service manifest does not match the explicit environment.'
     }
     $null = [guid]::Parse($script:state.ownerToken)
+    if ($script:state.withMonitoring) { Assert-GuestMonitorBinding }
     if ($script:state.schemaVersion -ge 2 -and $script:state.withSreExecution -isnot [bool]) {
         throw 'Fixture execution mode is missing or invalid.'
     }
@@ -292,10 +310,12 @@ function Assert-GuestExecutionAgent {
         @{ scope = $vmId; roleDefinitionId = $script:state.actionRoleDefinitionId; id = $script:state.actionRoleAssignmentId }
         @{ scope = $subnetId; roleDefinitionId = $networkRole; id = $script:state.networkAssignmentId }
     )
+    $expectedAction += @(Get-GuestMonitorGrantExpectation action $script:state.agentPrincipalId)
     if ($actionAssignments.Count -ne $expectedAction.Count) { throw 'Unknown or missing grant on the disposable action identity.' }
     foreach ($expectedGrant in $expectedAction) {
         $matches = @($actionAssignments | Where-Object {
             $_.scope -ieq $expectedGrant.scope -and $_.roleDefinitionId -ieq $expectedGrant.roleDefinitionId -and
+            $_.principalId -ieq $script:state.agentPrincipalId -and
             (-not $expectedGrant.id -or $_.id -ieq $expectedGrant.id)
         })
         if ($matches.Count -ne 1) { throw 'Disposable action identity grant scope/role does not match the exact allow-list.' }
@@ -303,10 +323,17 @@ function Assert-GuestExecutionAgent {
 
     $systemAssignments = @(Invoke-Azure @('role', 'assignment', 'list', '--all', '--assignee-object-id',
         $script:state.systemPrincipalId, '--fill-principal-name', 'false', '--fill-role-definition-name', 'false'))
-    if ($systemAssignments.Count -ne 1 -or $systemAssignments[0].scope -ine $groupId -or
-        $systemAssignments[0].roleDefinitionId -ine $readerRole -or
-        $systemAssignments[0].id -ine $script:state.systemReaderAssignmentId) {
+    $expectedSystem = @(@{ scope = $groupId; roleDefinitionId = $readerRole; id = $script:state.systemReaderAssignmentId })
+    $expectedSystem += @(Get-GuestMonitorGrantExpectation system $script:state.systemPrincipalId)
+    if ($systemAssignments.Count -ne $expectedSystem.Count) {
         throw 'Disposable SRE Agent system principal has an unknown or missing grant.'
+    }
+    foreach ($expectedGrant in $expectedSystem) {
+        $matches = @($systemAssignments | Where-Object {
+            $_.scope -ieq $expectedGrant.scope -and $_.roleDefinitionId -ieq $expectedGrant.roleDefinitionId -and
+            $_.id -ieq $expectedGrant.id -and $_.principalId -ieq $script:state.systemPrincipalId
+        })
+        if ($matches.Count -ne 1) { throw 'Disposable SRE system grant does not match the exact allow-list.' }
     }
 
     $adminAssignments = @(Invoke-Azure @('role', 'assignment', 'list', '--scope', $script:state.agentId,
@@ -352,7 +379,8 @@ function Assert-GuestExecutionNetwork {
         $vnet.tags.environmentId -cne $EnvironmentName -or $vnet.tags.managedBy -cne 'retailtx' -or
         @($vnet.addressSpace.addressPrefixes).Count -ne 1 -or
         $vnet.addressSpace.addressPrefixes[0] -cne '10.90.0.0/24' -or
-        @($vnet.virtualNetworkPeerings).Count -ne 0 -or
+        (@($vnet.virtualNetworkPeerings).Count -ne 0 -and -not
+            ($script:state.ContainsKey('withMonitoring') -and $script:state.withMonitoring)) -or
         $subnet.id -ine $SubnetId -or $subnet.addressPrefix -cne '10.90.0.0/27' -or
         $subnet.defaultOutboundAccess -ne $false -or
         @($subnet.delegations).Count -ne 1 -or
@@ -374,6 +402,11 @@ function Assert-GuestExecutionNetwork {
         $pip.natGateway.id -ine $natId -or $pip['ipConfiguration'] -or $pip['publicIPPrefix'] -or
         $pip['dnsSettings']) {
         throw 'Disposable SRE Agent network is not an isolated delegated /27 with its exact owned NAT egress.'
+    }
+    if ($script:state.ContainsKey('withMonitoring') -and $script:state.withMonitoring -and
+        @($vnet.virtualNetworkPeerings).Count) {
+        Assert-GuestMonitorPeering $vnet.virtualNetworkPeerings[0] -AgentSide
+        if (@($vnet.virtualNetworkPeerings).Count -ne 1) { throw 'Unexpected isolated agent peering.' }
     }
 }
 
@@ -605,12 +638,18 @@ function Assert-GuestTeardownInventory {
         $expected["$groupId/providers/Microsoft.Network/natGateways/nat-retailtx-guest-agent-$EnvironmentName"] = 'Microsoft.Network/natGateways'
         $expected["$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName"] = 'Microsoft.Network/virtualNetworks'
     }
+    if ($script:state.withMonitoring) { Add-GuestMonitorInventory $expected }
     $policyId = "$vmId/extensions/AzurePolicyforLinux"
     $resources = @(Invoke-Azure @('resource', 'list', '--resource-group', $groupName))
     $seen = @{}
     foreach ($resource in $resources) {
         if ($seen.ContainsKey($resource.id)) { throw 'Duplicate teardown inventory ID.' }
         $seen[$resource.id] = $true
+        if ($script:state.withMonitoring -and
+            $resource.id -ieq "$groupId/providers/Microsoft.Network/networkInterfaces/nic-$suffix-monitor") {
+            Assert-GuestMonitorNic $resource
+            continue
+        }
         if ($resource.id -ieq $policyId) {
             if ($resource.type -ine 'Microsoft.Compute/virtualMachines/extensions') {
                 throw 'Unexpected policy child resource type.'
@@ -618,7 +657,7 @@ function Assert-GuestTeardownInventory {
             continue
         }
         if (-not $expected.ContainsKey($resource.id) -or $resource.type -ine $expected[$resource.id] -or
-            $resource.location -ine $location -or $resource.tags.demo -cne 'retailtx' -or
+            ($resource.location -ine $location -and -not ($resource.type -ieq 'Microsoft.Network/privateDnsZones' -and $resource.location -ceq 'global')) -or $resource.tags.demo -cne 'retailtx' -or
             $resource.tags.environmentId -cne $EnvironmentName -or $resource.tags.profile -cne 'guest-service' -or
             $resource.tags.managedBy -cne 'retailtx' -or $resource.tags.ownerToken -cne $script:state.ownerToken) {
             throw 'Foreign or unexpected resource in owned group; refusing group deletion.'
@@ -627,11 +666,15 @@ function Assert-GuestTeardownInventory {
     if ($seen.ContainsKey($vmId)) {
         $extensionResponse = Invoke-Azure @('rest', '--method', 'get', '--url', "$vmId/extensions?api-version=2024-11-01")
         $extensions = @($extensionResponse.value)
-        if ($extensions.Count -gt 1) { throw 'Unexpected VM child extensions; refusing group deletion.' }
-        if ($seen.ContainsKey($policyId) -and $extensions.Count -ne 1) {
+        if ($extensions.Count -gt $(if ($script:state.withMonitoring) { 2 } else { 1 })) { throw 'Unexpected VM child extensions; refusing group deletion.' }
+        if ($seen.ContainsKey($policyId) -and @($extensions | Where-Object id -IEQ $policyId).Count -ne 1) {
             throw 'Policy extension inventory did not resolve to exact child.'
         }
         foreach ($extension in $extensions) {
+            if ($script:state.withMonitoring -and $extension.id -ieq "$vmId/extensions/AzureMonitorLinuxAgent") {
+                Assert-GuestMonitorExtension $extension
+                continue
+            }
             if ($extension.id -ine $policyId -or $extension.name -cne 'AzurePolicyforLinux' -or
                 $extension.type -ine 'Microsoft.Compute/virtualMachines/extensions' -or
                 $extension.location -ine $location -or $extension.properties.publisher -cne 'Microsoft.GuestConfiguration' -or
@@ -703,7 +746,8 @@ function Assert-GuestNetwork {
         throw 'Exact owned outbound-only public IP configuration changed.'
     }
     $nsg = Invoke-Azure @('network', 'nsg', 'show', '--ids', $nsgId)
-    if ($nsg.tags.ownerToken -cne $script:state.ownerToken -or @($nsg.securityRules).Count -ne 5) {
+    $monitoring = $script:state.ContainsKey('withMonitoring') -and $script:state.withMonitoring
+    if ($nsg.tags.ownerToken -cne $script:state.ownerToken -or @($nsg.securityRules).Count -ne $(if ($monitoring) { 6 } else { 5 })) {
         throw 'Guest network security ownership/rule count mismatch.'
     }
     $expected = @{
@@ -717,6 +761,10 @@ function Assert-GuestNetwork {
             destinationPortRange = '*'; destinationAddressPrefix = '*' }
         DenyOutbound = @{ direction = 'Outbound'; access = 'Deny'; priority = 4096; protocol = '*'
             destinationPortRange = '*'; destinationAddressPrefix = '*' }
+    }
+    if ($monitoring) {
+        $expected.PrivateMonitor = @{ direction = 'Outbound'; access = 'Allow'; priority = 130; protocol = 'Tcp'
+            destinationPortRange = '443'; destinationAddressPrefix = '10.89.0.0/24' }
     }
     foreach ($rule in $nsg.securityRules) {
         if (-not $expected.ContainsKey($rule.name)) { throw 'Unexpected guest network rule.' }
@@ -750,7 +798,7 @@ function Add-GuestJournal {
 
 function Get-GuestBaseDeploymentParameters {
     param([string]$AdminSshPublicKey)
-    return @{
+    $parameters = @{
         environmentName = @{ value = $EnvironmentName }
         location = @{ value = $location }
         ownerToken = @{ value = $script:state.ownerToken }
@@ -758,6 +806,8 @@ function Get-GuestBaseDeploymentParameters {
         adminSshPublicKey = @{ value = $AdminSshPublicKey }
         agentPrincipalId = @{ value = $script:state.retainedAgentPrincipalId }
     }
+    if ($script:state.ContainsKey('withMonitoring')) { $parameters.withMonitoring = @{ value = $script:state.withMonitoring } }
+    return $parameters
 }
 
 function Save-GuestTeardownUnknown {
@@ -1028,12 +1078,14 @@ try {
     if ($Operation -eq 'Down') {
         if (-not $PSCmdlet.ShouldProcess($groupId, 'Delete exact owned guest fixture and verify absence')) { return }
         Assert-GuestTeardownInventory
+        if ($script:state.withMonitoring) { Remove-GuestMonitorAccess }
         Assert-GuestExecutionAssignmentsForTeardown
         Remove-GuestExecutionRoleAssignments
         Remove-GuestExecutionRole
         $script:state.phase = 'deleting'
         Add-GuestJournal @{ action = 'delete'; intentAtUtc = [DateTimeOffset]::UtcNow.ToString('o'); outcome = 'intent' }
         if ($group) { Invoke-GuestGroupDeletion }
+        if ($script:state.withMonitoring) { Assert-GuestMonitorEndpointAbsent }
         $residuals = @(Invoke-Azure @('resource', 'list', '--tag', "ownerToken=$($script:state.ownerToken)"))
         if ($residuals.Count -ne 0) {
             $script:state.teardownResiduals = @($residuals | ForEach-Object { @{ id = $_.id; type = $_.type } })
@@ -1078,6 +1130,7 @@ try {
             if ([bool]$script:state.withSreExecution -ne $WithSreExecution.IsPresent) {
                 throw 'Fixture execution mode is immutable. Use Down before changing WithSreExecution.'
             }
+            if ([bool]$script:state.withMonitoring -ne $WithMonitoring.IsPresent) { throw 'Monitoring mode is immutable; use Down first.' }
             if (-not $group -or $script:state.phase -in @('provisioning', 'deleting')) {
                 throw 'Incomplete deployment intent cannot be replayed blindly; use Down then Up.'
             }
@@ -1105,6 +1158,7 @@ try {
                 expiresAt = [DateTimeOffset]::UtcNow.AddHours(4).ToString('o')
                 journal = @(); pendingCommand = $null; currentFault = $null; lastEvidence = $null
                 withSreExecution = $WithSreExecution.IsPresent
+                withMonitoring = $WithMonitoring.IsPresent
                 retainedAgentId = $binding.agentId; retainedAgentIdentityId = $binding.agentIdentityId
                 retainedAgentPrincipalId = $binding.agentPrincipalId
                 readerAssignmentId = $null
@@ -1117,6 +1171,13 @@ try {
                 actionRoleAssignmentId = $null; actionReaderAssignmentId = $null
                 systemReaderAssignmentId = $null; networkAssignmentId = $null
                 adminObjectId = $operatorObjectId; adminAssignmentId = $null
+            }
+            if ($WithMonitoring) {
+                $script:state.workspaceId = $foundation.outputs.WORKSPACE_ID
+                $script:state.workspaceCustomerId = $foundation.outputs.WORKSPACE_CUSTOMER_ID
+                $script:state.dceId = $foundation.outputs.DCE_ID
+                $script:state.privateLinkScopeId = "$(($foundation.outputs.WORKSPACE_ID -split '/providers/')[0])/providers/Microsoft.Insights/privateLinkScopes/ampls-retailtx-$FoundationEnvironment"
+                $script:state.monitorAccess = @{}
             }
             Save-RetailState $script:state $statePath
             $keyPath = Join-Path $directory 'guest-ephemeral-key'
@@ -1204,6 +1265,10 @@ try {
         }
         Assert-GuestReader
         Assert-GuestExecutionAgent
+        if ($Operation -in @('Monitor', 'Telemetry', 'Connect', 'Arm', 'Incident')) {
+            Invoke-GuestMonitorOperation $Operation
+            return
+        }
         $evidence = Get-GuestStatus
         if ($Operation -ne 'Status') {
             if ($script:state.pendingCommand) { throw 'Unresolved command; writes remain blocked. Use Status or Down.' }
@@ -1213,6 +1278,7 @@ try {
             $request = @{ action = $Operation.ToLowerInvariant(); ownerToken = $script:state.ownerToken
                 sourceHashes = $sourceHashes; actor = $actor }
             if ($Operation -eq 'Fault') {
+                if ($script:state.withMonitoring -and -not $Canary) { Assert-GuestMonitorFaultReady }
                 if ($script:state.phase -cne 'ready') { throw 'Fault requires healthy, guarded ready state.' }
                 if (-not $Canary -and -not $evidence.watchdogProof) { throw '60-second independent watchdog canary must pass first.' }
                 $duration = if ($Canary) { 60 } else { $FaultDurationSeconds }
@@ -1232,6 +1298,7 @@ try {
             if ($Operation -eq 'Fault') { $script:state.currentFault.deadlineUtc = $evidence.marker.deadlineUtc }
             $script:state.phase = if ($evidence.marker -and $evidence.marker.phase -cnotin @('recovered', 'cancelled')) { 'fault-active' } else { 'ready' }
             Save-RetailState $script:state $statePath
+            if ($Operation -eq 'Reset' -and $script:state.withMonitoring) { Complete-GuestMonitorReset }
         }
     }
     Get-GuestOutput -GroupExists $true -PowerState 'PowerState/running' -Evidence $evidence

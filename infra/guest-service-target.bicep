@@ -5,6 +5,7 @@ param location string
 param tags object
 param adminSshPublicKey string
 param agentPrincipalId string
+param withMonitoring bool = false
 
 var suffix = 'retailtx-guest-${environmentName}'
 resource outboundAddress 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
@@ -34,7 +35,7 @@ module nsg 'br/public:avm/res/network/network-security-group:0.5.3' = {
     location: location
     tags: tags
     enableTelemetry: false
-    securityRules: [
+    securityRules: concat([
       {
         name: 'AzureHttps'
         properties: {
@@ -101,7 +102,19 @@ module nsg 'br/public:avm/res/network/network-security-group:0.5.3' = {
           destinationAddressPrefix: '*'
         }
       }
-    ]
+    ], withMonitoring ? [{
+      name: 'PrivateMonitor'
+      properties: {
+        priority: 130
+        direction: 'Outbound'
+        access: 'Allow'
+        protocol: 'Tcp'
+        sourcePortRange: '*'
+        destinationPortRange: '443'
+        sourceAddressPrefix: '*'
+        destinationAddressPrefix: '10.89.0.0/24'
+      }
+    }] : [])
   }
 }
 module vnet 'br/public:avm/res/network/virtual-network:0.10.2' = {
@@ -116,6 +129,7 @@ module vnet 'br/public:avm/res/network/virtual-network:0.10.2' = {
       networkSecurityGroupResourceId: nsg.outputs.resourceId
       natGatewayResourceId: nat.id
       defaultOutboundAccess: false
+      privateEndpointNetworkPolicies: 'Disabled'
     }]
     tags: tags
     enableTelemetry: false
@@ -128,6 +142,7 @@ module host 'br/public:avm/res/compute/virtual-machine:0.22.3' = {
     computerName: 'guest-${environmentName}'
     location: location
     vmSize: 'Standard_B2s'
+    managedIdentities: { systemAssigned: withMonitoring }
     availabilityZone: -1
     osType: 'Linux'
     imageReference: {

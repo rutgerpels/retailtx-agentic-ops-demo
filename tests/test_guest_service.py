@@ -10,6 +10,11 @@ try:
     import fcntl  # noqa: F401
 except ImportError:
     sys.modules["fcntl"] = types.SimpleNamespace(LOCK_EX=2, LOCK_NB=4)
+try:
+    import syslog  # noqa: F401
+except ImportError:
+    sys.modules["syslog"] = types.SimpleNamespace(LOG_PID=1, LOG_LOCAL0=128, LOG_INFO=6,
+                                                openlog=lambda *args: None, syslog=lambda *args: None)
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("guest_controller", ROOT / "scripts" / "guest" / "controller.py")
@@ -91,6 +96,22 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(evidence["healthy"])
         self.assertTrue(evidence["watchdogEnabled"])
         self.assertTrue(evidence["watchdogActive"])
+
+    def test_observer_emits_health_without_repair_or_state_write(self):
+        self.execute(self.request())
+        self.saved.clear()
+        self.calls.clear()
+        with patch.object(controller.syslog, "syslog") as emit:
+            controller.observe(self.config, self.state)
+        import json
+        receipt = json.loads(emit.call_args.args[1])
+        self.assertEqual(receipt["marker"]["runId"], RUN)
+        self.assertEqual(receipt["ownerToken"], OWNER)
+        self.assertFalse(receipt["active"])
+        self.assertFalse(receipt["healthy"])
+        self.assertNotIn("sourceHashes", receipt)
+        self.assertFalse(self.saved)
+        self.assertFalse(any(action in ("start", "stop") for action, _ in self.calls))
 
     def test_approved_repair_requires_current_deadline_and_active_run(self):
         self.execute(self.request())
@@ -368,13 +389,13 @@ class BootstrapTests(unittest.TestCase):
                 patch.object(self.bootstrap, "install_exact", writes), \
                 patch.object(self.bootstrap.subprocess, "run", calls):
             self.bootstrap.main()
-        self.assertEqual(writes.call_count, 7)
+        self.assertEqual(writes.call_count, len(self.bootstrap.FILES) + 1)
         for call in writes.call_args_list[1:]:
             path, content, mode = call.args
             self.assertEqual(content, self.sources[path.name])
             self.assertEqual(mode, 0o644)
         self.assertEqual(calls.call_args_list[0].args[0], ["/usr/bin/systemctl", "daemon-reload"])
-        request = json.loads(base64.b64decode(calls.call_args_list[-1].args[0][-1]))
+        request = json.loads(base64.b64decode(calls.call_args_list[-2].args[0][-1]))
         self.assertEqual(request["action"], "configure")
         self.assertEqual(request["ownerToken"], OWNER)
         self.assertEqual(request["sourceHashes"], self.payload["config"]["sourceHashes"])

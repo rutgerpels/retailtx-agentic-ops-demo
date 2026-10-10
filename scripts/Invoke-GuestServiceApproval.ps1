@@ -14,6 +14,9 @@ the native result and Azure caller before supplying recovery evidence.
 Explicit authorized subscription.
 .PARAMETER EnvironmentName
 Owned fixture created with WithSreExecution.
+.PARAMETER IncidentThreadId
+For Propose only, continue a verified Azure Monitor incident instead of creating
+an unrelated thread. Requires an exact-run Incident discovery receipt.
 .EXAMPLE
 .\scripts\Invoke-GuestServiceApproval.ps1 Propose -SubscriptionId <guid> -EnvironmentName demo20
 .OUTPUTS
@@ -23,12 +26,16 @@ Thread identity, exact native execution records, and approval state.
 param(
     [Parameter(Mandatory, Position = 0)][ValidateSet('Configure', 'Propose', 'Read', 'Verify')][string]$Operation,
     [Parameter(Mandatory)][guid]$SubscriptionId,
-    [string]$EnvironmentName = 'demo20'
+    [string]$EnvironmentName = 'demo20',
+    [guid]$IncidentThreadId
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Azure.Common.psm1') -Force
 Assert-RetailEnvironmentName $EnvironmentName
+if ($PSBoundParameters.ContainsKey('IncidentThreadId') -and $Operation -cne 'Propose') {
+    throw 'IncidentThreadId applies only to Propose.'
+}
 if ($WhatIfPreference) {
     $null = $PSCmdlet.ShouldProcess($EnvironmentName, "$Operation supervised SRE guest approval (no preflight or local writes)")
     return
@@ -121,6 +128,22 @@ function New-ApprovedRepairCommand {
     return "az vm run-command invoke --ids $($Fixture.vmId) --subscription $($Fixture.subscriptionId) --command-id RunShellScript --scripts 'echo $encoded | base64 --decode | python3' --output json"
 }
 
+function Assert-ApprovalIncidentThread {
+    param([guid]$ThreadId, [hashtable]$Fixture, [hashtable]$Receipt)
+    if (-not $Fixture['withMonitoring'] -or $Receipt.ownerToken -cne $Fixture.ownerToken -or
+        $Receipt.agentId -ine $Fixture.agentId -or $Receipt.runId -cne $Fixture.currentFault.runId -or
+        $Receipt.threadId -cne $ThreadId.ToString() -or -not $Receipt.sreIncident -or
+        $Receipt.sreIncident.threadId -cne $ThreadId.ToString() -or
+        $Receipt.sreIncident.targetResourceId -ine $Fixture.vmId -or
+        $Receipt.sreIncident.alertRuleResourceId -ine $Fixture.alertId -or
+        $Receipt.monitorCondition -cne 'Fired') { throw 'Thread is not the exact active Monitor incident for this owned fault.' }
+    $alertGuid = [guid]::Parse($Receipt.sreIncident.id).ToString()
+    if ($Receipt.sreIncident.alertId -ine "$($Fixture.vmId)/providers/Microsoft.AlertsManagement/alerts/$alertGuid") {
+        throw 'Incident alert ID is outside the exact fixture.'
+    }
+    return $alertGuid
+}
+
 function Assert-ApprovedExecution {
     param([hashtable]$Execution, [string]$Command)
     $null = [guid]::Parse($Execution.id)
@@ -201,6 +224,18 @@ try {
         # Use the saved fault receipt: proposal inspection must not submit a guest command.
         $guest = $state.lastEvidence
         $command = New-ApprovedRepairCommand $state $guest
+        $incidentGuid = $null
+        if ($PSBoundParameters.ContainsKey('IncidentThreadId')) {
+            $incident = Get-Content -LiteralPath (Join-Path $directory "guest-monitor-incident-$($guest.marker.runId).json") -Raw |
+                ConvertFrom-Json -AsHashtable
+            $incidentGuid = Assert-ApprovalIncidentThread $IncidentThreadId $state $incident
+            $liveIncident = Invoke-ApprovalRequest Get "/api/v2/incidentManagement/incidents?incidentId=$incidentGuid"
+            $liveReceipt = $incident.Clone()
+            $liveReceipt.sreIncident = $liveIncident
+            $null = Assert-ApprovalIncidentThread $IncidentThreadId $state $liveReceipt
+            $messages = Invoke-ApprovalRequest Get "/api/v1/threads/$IncidentThreadId/messages"
+            if ($messages.state -cne 'Idle') { throw 'Wait for the alert-triggered investigation to become Idle before proposing repair.' }
+        }
         $text = @"
 $marker
 Supervised HUMAN-APPROVAL guest-service proof on a disposable native Azure VM, not Arc, autonomous healing or retail recovery.
@@ -217,14 +252,19 @@ Do not request guest diagnostic/status commands. After human approval use only A
         if (-not $PSCmdlet.ShouldProcess($state.agentId, 'Create human-approval guest repair proposal')) { return }
         $intent = @{ schemaVersion = 1; ownerToken = $owner; agentId = $state.agentId
             environmentName = $EnvironmentName; phase = 'Requested'; threadId = $null
-            requestedAt = [DateTimeOffset]::UtcNow.ToString('o'); initial = $guest.marker
+            requestedAt = [DateTimeOffset]::UtcNow.ToString('o'); initial = $guest.marker; incidentGuid = $incidentGuid
             expectedCommand = $command; text = $text; authorization = 'human-ui-required' }
         Save-RetailState $intent $requestPath
-        $created = Invoke-ApprovalRequest Post '/api/v1/threads' @{
-            startMessage = @{ text = $text; userId = 'retailtx-operator-adapter'
-                displayName = 'RetailTx operator adapter'; agent = ($state.agentId -split '/')[-1] }
+        $message = @{ text = $text; userId = 'retailtx-operator-adapter'
+            displayName = 'RetailTx operator adapter'; agent = ($state.agentId -split '/')[-1] }
+        if ($incidentGuid) {
+            $intent.threadId = $IncidentThreadId.ToString()
+            Save-RetailState $intent $requestPath
+            $null = Invoke-ApprovalRequest Post "/api/v1/threads/$IncidentThreadId/messages" $message
+        } else {
+            $created = Invoke-ApprovalRequest Post '/api/v1/threads' @{ startMessage = $message }
+            $intent.threadId = [guid]::Parse($created.id).ToString()
         }
-        $intent.threadId = [guid]::Parse($created.id).ToString()
         $intent.phase = 'Created'
         Save-RetailState $intent $requestPath
     }
@@ -235,7 +275,14 @@ Do not request guest diagnostic/status commands. After human approval use only A
     }
     $threadId = [guid]::Parse($saved.threadId).ToString()
     $thread = Invoke-ApprovalRequest Get "/api/v1/threads/$threadId"
-    if (-not $thread.startMessage.text.StartsWith($marker, [StringComparison]::Ordinal)) {
+    if ($saved['incidentGuid']) {
+        $incident = Invoke-ApprovalRequest Get "/api/v2/incidentManagement/incidents?incidentId=$($saved.incidentGuid)"
+        if ($incident.threadId -cne $threadId -or $incident.targetResourceId -ine $state.vmId -or
+            $incident.alertRuleResourceId -ine $state.alertId -or
+            $incident.alertId -ine "$($state.vmId)/providers/Microsoft.AlertsManagement/alerts/$($saved.incidentGuid)") {
+            throw 'Live incident/thread binding changed.'
+        }
+    } elseif (-not $thread.startMessage.text.StartsWith($marker, [StringComparison]::Ordinal)) {
         throw 'Live thread owner marker differs.'
     }
     $messages = Invoke-ApprovalRequest Get "/api/v1/threads/$threadId/messages"
