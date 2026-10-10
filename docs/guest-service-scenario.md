@@ -301,10 +301,34 @@ single structured summary object (`EnvironmentName`, `TotalCycles`, `Success`,
 and a `Cycles` array with per-cycle timings and evidence) rather than narrating
 progress, consistent with the repo's `Write-Verbose`-only console convention.
 
-This tool has been written and syntax-validated but **not yet executed against
-a live VM**. It closes a gap in tooling, not yet a gap in verified evidence;
-the three-cycle/reboot claim remains unverified until it is run and its output
-is reconciled here.
+**2026-10-10: executed live against a fresh `demo25` fixture.** The wrapper
+ran bootstrap + three fault/repair cycles + one reboot cycle end to end and
+returned `TotalCycles=5, Success=True`. Every one of the 33 entries in the
+fixture's persisted journal (`guest-service-state.json`) recorded
+`outcome: "verified"` (or `"deployment-succeeded"` for the initial deploy) —
+zero failures anywhere in the run.
+
+| Cycle | Run ID | Fault injected (UTC) | Recovery (UTC) | Recovered by |
+| --- | --- | --- | --- | --- |
+| Bootstrap canary | `659a2dab-6f54-4b2d-a426-561feb6786f5` | 13:06:50 (60 s, canary) | 13:07:58 | `watchdog` (self-heal, proves the watchdog is live before real cycles start) |
+| Cycle 1 | `4e65332d-f760-41cf-9b0d-e9b2d2704daf` | 13:10:56 (300 s) | 13:14:32 (repair started 13:13:58) | operator-equivalent `Repair` call |
+| Cycle 2 | `15aca3dc-ea45-45e7-badd-5b7212914fd0` | 13:18:10 (300 s) | 13:21:47 (repair started 13:21:13) | operator-equivalent `Repair` call |
+| Cycle 3 | `b705f5c6-5d2e-49bb-a269-0c8dae7e2234` | 13:25:22 (300 s) | 13:28:59 (repair started 13:28:25) | operator-equivalent `Repair` call |
+| Reboot cycle | `36882af3-5694-41be-a05b-37bc53bdd2d1` | 13:32:34 (300 s, non-canary) | 13:33:45 | `watchdog`, `recoveryReason: "reboot"` |
+
+The reboot cycle is the key new proof: the VM actually restarted (a distinct
+`bootId`, `e90e6c24-...`, confirms a real reboot rather than a service
+restart) and the watchdog detected and recovered the stopped service on its
+own, with **no operator or SRE repair call**, well inside the ten-minute
+recovery deadline (`13:37:43`). A final `Status` check at `13:35:25` confirmed
+`active=true, healthy=true`. All five cycles share one consistent actor/owner
+identity throughout, with no unexpected identity changes between cycles.
+
+Total live test execution ran from the fixture's `deploy` entry (`12:56:49`)
+to its final `status` entry (`13:35:25`) — about 38.5 minutes, in line with
+the original estimate. This closes both previously open gaps: three-cycle
+repeatability and cross-reboot watchdog acceptance are now verified, not just
+tooled. The `demo25` fixture was torn down after evidence was captured.
 
 ## Human-approved repair evidence (`demo23`)
 
