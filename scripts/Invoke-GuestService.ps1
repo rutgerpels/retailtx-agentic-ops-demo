@@ -29,6 +29,10 @@ On Up only, create a separate Review-mode SRE Agent and UAMI in the fixture
 resource group, with VM-scoped Run Command permission and isolated VNet.
 .PARAMETER WithMonitoring
 On Up only, prepare private AMA monitoring. Requires WithSreExecution.
+.PARAMETER WithIsolatedMonitoring
+Fresh Up only, use a fixture-owned workspace, DCE and AMPLS for a diagnostic
+experiment. Requires WithMonitoring and WithSreExecution; never changes shared
+monitoring. Down permanently deletes the disposable workspace and its logs.
 .EXAMPLE
 .\scripts\Invoke-GuestService.ps1 Up -SubscriptionId <guid>
 .EXAMPLE
@@ -47,7 +51,8 @@ param(
     [guid]$RunId,
     [switch]$Canary,
     [switch]$WithSreExecution,
-    [switch]$WithMonitoring
+    [switch]$WithMonitoring,
+    [switch]$WithIsolatedMonitoring
 )
 
 Set-StrictMode -Version Latest
@@ -61,6 +66,9 @@ if ($Canary -and $Operation -cne 'Fault') { throw 'Canary applies only to Fault.
 if ($WithSreExecution -and $Operation -cne 'Up') { throw 'WithSreExecution applies only to Up.' }
 if ($WithMonitoring -and ($Operation -cne 'Up' -or -not $WithSreExecution)) {
     throw 'WithMonitoring requires Up with WithSreExecution.'
+}
+if ($WithIsolatedMonitoring -and ($Operation -cne 'Up' -or -not $WithMonitoring -or -not $WithSreExecution)) {
+    throw 'WithIsolatedMonitoring requires fresh Up with WithMonitoring and WithSreExecution.'
 }
 if ($PSBoundParameters.ContainsKey('RunId') -and $Operation -cnotin @('Repair', 'Reset')) {
     throw 'RunId applies only to exact-run Repair and Reset.'
@@ -101,7 +109,7 @@ function Get-ArtifactHash {
         'infra\guest-service-agent-target.bicep', 'scripts\Invoke-GuestServiceApproval.ps1',
         'scripts\Azure.Common.psm1', 'scripts\Stage0.Common.psm1',
         'scripts\guest\GuestMonitor.ps1', 'scripts\guest\query.py',
-        'infra\guest-service-monitor.bicep', 'scripts\disk\DiskSre.ps1')) {
+        'infra\guest-service-monitor.bicep', 'infra\guest-monitor-foundation.bicep', 'scripts\disk\DiskSre.ps1')) {
         $hashes[$relative] = (Get-FileHash -LiteralPath (Join-Path $root $relative) -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     return $hashes
@@ -122,6 +130,11 @@ function Assert-GuestManifest {
         $script:state.withSreExecution = $false
     }
     if (-not $script:state.ContainsKey('withMonitoring')) { $script:state.withMonitoring = $false }
+    if (-not $script:state.ContainsKey('withIsolatedMonitoring')) { $script:state.withIsolatedMonitoring = $false }
+    if ($script:state.withIsolatedMonitoring -isnot [bool] -or
+        ($script:state.withIsolatedMonitoring -and -not $script:state.withMonitoring)) {
+        throw 'Invalid isolated monitoring mode.'
+    }
     if ($script:state.withMonitoring -isnot [bool] -or
         ($script:state.withMonitoring -and -not $script:state.withSreExecution)) {
         throw 'Invalid monitoring mode or missing isolated execution identity.'
@@ -639,7 +652,10 @@ function Assert-GuestTeardownInventory {
         $expected["$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName"] = 'Microsoft.Network/virtualNetworks'
     }
     if ($script:state.withMonitoring) { Add-GuestMonitorInventory $expected }
-    $policyId = "$vmId/extensions/AzurePolicyforLinux"
+    $platformExtensions = @{
+        "$vmId/extensions/AzurePolicyforLinux" = @{ name = 'AzurePolicyforLinux'; publisher = 'Microsoft.GuestConfiguration'; type = 'ConfigurationforLinux' }
+        "$vmId/extensions/MDE.Linux" = @{ name = 'MDE.Linux'; publisher = 'Microsoft.Azure.AzureDefenderForServers'; type = 'MDE.Linux' }
+    }
     $resources = @(Invoke-Azure @('resource', 'list', '--resource-group', $groupName))
     $seen = @{}
     foreach ($resource in $resources) {
@@ -650,41 +666,50 @@ function Assert-GuestTeardownInventory {
             Assert-GuestMonitorNic $resource
             continue
         }
-        if ($resource.id -ieq $policyId) {
+        if ($platformExtensions.ContainsKey($resource.id)) {
             if ($resource.type -ine 'Microsoft.Compute/virtualMachines/extensions') {
                 throw 'Unexpected policy child resource type.'
             }
             continue
         }
         if (-not $expected.ContainsKey($resource.id) -or $resource.type -ine $expected[$resource.id] -or
-            ($resource.location -ine $location -and -not ($resource.type -ieq 'Microsoft.Network/privateDnsZones' -and $resource.location -ceq 'global')) -or $resource.tags.demo -cne 'retailtx' -or
+            ($resource.location -ine $location -and -not ($resource.type -iin @('Microsoft.Network/privateDnsZones', 'Microsoft.Network/privateDnsZones/virtualNetworkLinks', 'Microsoft.Insights/privateLinkScopes') -and $resource.location -ceq 'global')) -or $resource.tags.demo -cne 'retailtx' -or
             $resource.tags.environmentId -cne $EnvironmentName -or $resource.tags.profile -cne 'guest-service' -or
             $resource.tags.managedBy -cne 'retailtx' -or $resource.tags.ownerToken -cne $script:state.ownerToken) {
             throw 'Foreign or unexpected resource in owned group; refusing group deletion.'
+        }
+        if ($resource.type -ieq 'Microsoft.Network/privateDnsZones/virtualNetworkLinks') {
+            Assert-GuestMonitorDnsLink $resource
         }
     }
     if ($seen.ContainsKey($vmId)) {
         $extensionResponse = Invoke-Azure @('rest', '--method', 'get', '--url', "$vmId/extensions?api-version=2024-11-01")
         $extensions = @($extensionResponse.value)
-        if ($extensions.Count -gt $(if ($script:state.withMonitoring) { 2 } else { 1 })) { throw 'Unexpected VM child extensions; refusing group deletion.' }
-        if ($seen.ContainsKey($policyId) -and @($extensions | Where-Object id -IEQ $policyId).Count -ne 1) {
-            throw 'Policy extension inventory did not resolve to exact child.'
+        if ($extensions.Count -gt $(if ($script:state.withMonitoring) { 3 } else { 2 })) { throw 'Unexpected VM child extensions; refusing group deletion.' }
+        foreach ($platformId in $platformExtensions.Keys) {
+            if ($seen.ContainsKey($platformId) -and @($extensions | Where-Object id -IEQ $platformId).Count -ne 1) {
+                throw 'Platform extension inventory did not resolve to exact child.'
+            }
         }
+        $extensionIds = @{}
         foreach ($extension in $extensions) {
+            if ($extensionIds.ContainsKey($extension.id)) { throw 'Duplicate VM child extension.' }
+            $extensionIds[$extension.id] = $true
             if ($script:state.withMonitoring -and $extension.id -ieq "$vmId/extensions/AzureMonitorLinuxAgent") {
                 Assert-GuestMonitorExtension $extension
                 continue
             }
-            if ($extension.id -ine $policyId -or $extension.name -cne 'AzurePolicyforLinux' -or
+            $platform = $platformExtensions[$extension.id]
+            if (-not $platform -or $extension.name -cne $platform.name -or
                 $extension.type -ine 'Microsoft.Compute/virtualMachines/extensions' -or
-                $extension.location -ine $location -or $extension.properties.publisher -cne 'Microsoft.GuestConfiguration' -or
-                $extension.properties.type -cne 'ConfigurationforLinux' -or
+                $extension.location -ine $location -or $extension.properties.publisher -cne $platform.publisher -or
+                $extension.properties.type -cne $platform.type -or
                 ($extension['tags'] -and $extension.tags.Count -ne 0)) {
-                throw 'Only the exact untagged platform AzurePolicyforLinux extension is permitted.'
+                throw 'Only exact untagged platform policy or Defender extensions are permitted.'
             }
         }
-    } elseif ($seen.ContainsKey($policyId)) {
-        throw 'Policy extension has no exact owned parent VM.'
+    } elseif (@($platformExtensions.Keys | Where-Object { $seen.ContainsKey($_) }).Count) {
+        throw 'Platform extension has no exact owned parent VM.'
     }
 }
 
@@ -1079,6 +1104,7 @@ try {
         if (-not $PSCmdlet.ShouldProcess($groupId, 'Delete exact owned guest fixture and verify absence')) { return }
         Assert-GuestTeardownInventory
         if ($script:state.withMonitoring) { Remove-GuestMonitorAccess }
+        if ($script:state.withIsolatedMonitoring) { Remove-GuestMonitorFoundation }
         Assert-GuestExecutionAssignmentsForTeardown
         Remove-GuestExecutionRoleAssignments
         Remove-GuestExecutionRole
@@ -1131,6 +1157,9 @@ try {
                 throw 'Fixture execution mode is immutable. Use Down before changing WithSreExecution.'
             }
             if ([bool]$script:state.withMonitoring -ne $WithMonitoring.IsPresent) { throw 'Monitoring mode is immutable; use Down first.' }
+            if ([bool]$script:state.withIsolatedMonitoring -ne $WithIsolatedMonitoring.IsPresent) {
+                throw 'Monitoring isolation is immutable; use Down before changing it.'
+            }
             if (-not $group -or $script:state.phase -in @('provisioning', 'deleting')) {
                 throw 'Incomplete deployment intent cannot be replayed blindly; use Down then Up.'
             }
@@ -1159,6 +1188,7 @@ try {
                 journal = @(); pendingCommand = $null; currentFault = $null; lastEvidence = $null
                 withSreExecution = $WithSreExecution.IsPresent
                 withMonitoring = $WithMonitoring.IsPresent
+                withIsolatedMonitoring = $WithIsolatedMonitoring.IsPresent
                 retainedAgentId = $binding.agentId; retainedAgentIdentityId = $binding.agentIdentityId
                 retainedAgentPrincipalId = $binding.agentPrincipalId
                 readerAssignmentId = $null
@@ -1173,10 +1203,16 @@ try {
                 adminObjectId = $operatorObjectId; adminAssignmentId = $null
             }
             if ($WithMonitoring) {
-                $script:state.workspaceId = $foundation.outputs.WORKSPACE_ID
-                $script:state.workspaceCustomerId = $foundation.outputs.WORKSPACE_CUSTOMER_ID
-                $script:state.dceId = $foundation.outputs.DCE_ID
-                $script:state.privateLinkScopeId = "$(($foundation.outputs.WORKSPACE_ID -split '/providers/')[0])/providers/Microsoft.Insights/privateLinkScopes/ampls-retailtx-$FoundationEnvironment"
+                $script:state.workspaceId = if ($WithIsolatedMonitoring) {
+                    "$groupId/providers/Microsoft.OperationalInsights/workspaces/law-retailtx-guest-$EnvironmentName"
+                } else { $foundation.outputs.WORKSPACE_ID }
+                $script:state.workspaceCustomerId = if ($WithIsolatedMonitoring) { $null } else { $foundation.outputs.WORKSPACE_CUSTOMER_ID }
+                $script:state.dceId = if ($WithIsolatedMonitoring) {
+                    "$groupId/providers/Microsoft.Insights/dataCollectionEndpoints/dce-retailtx-guest-$EnvironmentName"
+                } else { $foundation.outputs.DCE_ID }
+                $script:state.privateLinkScopeId = if ($WithIsolatedMonitoring) {
+                    "$groupId/providers/Microsoft.Insights/privateLinkScopes/ampls-retailtx-guest-$EnvironmentName"
+                } else { "$(($foundation.outputs.WORKSPACE_ID -split '/providers/')[0])/providers/Microsoft.Insights/privateLinkScopes/ampls-retailtx-$FoundationEnvironment" }
                 $script:state.monitorAccess = @{}
             }
             Save-RetailState $script:state $statePath

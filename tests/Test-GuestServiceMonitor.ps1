@@ -73,9 +73,30 @@ $evidence.receipt.marker.runId = [guid]::NewGuid().ToString()
 Assert-Rejected { Assert-GuestTelemetry $evidence }
 $expected = @{}
 Add-GuestMonitorInventory $expected
-if ($expected.Count -ne 9 -or -not $expected.ContainsKey("$vmId/extensions/AzureMonitorLinuxAgent")) {
+if ($expected.Count -ne 19 -or -not $expected.ContainsKey("$vmId/extensions/AzureMonitorLinuxAgent")) {
     throw 'Monitoring teardown inventory is incomplete.'
 }
+$script:dnsLink = @{ id = "$groupId/providers/Microsoft.Network/privateDnsZones/privatelink.monitor.azure.com/virtualNetworkLinks/guest"
+    tags = @{ ownerToken = $script:state.ownerToken }; registrationEnabled = $false
+    virtualNetwork = @{ id = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-$EnvironmentName" } }
+function Invoke-Azure {
+    param([string[]]$Arguments)
+    if (($Arguments[0..5] -join ' ') -cne 'network private-dns link vnet show --ids' -or $Arguments[6] -cne $script:dnsLink.id) {
+        throw 'Unexpected DNS-link read.'
+    }
+    return $script:dnsLink
+}
+Assert-GuestMonitorDnsLink @{ id = $script:dnsLink.id }
+$script:dnsLink.registrationEnabled = $true
+Assert-Rejected { Assert-GuestMonitorDnsLink @{ id = $script:dnsLink.id } }
+$script:dnsLink.registrationEnabled = $false
+$script:dnsLink.virtualNetwork.id = "$groupId/providers/Microsoft.Network/virtualNetworks/foreign"
+Assert-Rejected { Assert-GuestMonitorDnsLink @{ id = $script:dnsLink.id } }
+$script:dnsLink.id = "$groupId/providers/Microsoft.Network/privateDnsZones/privatelink.monitor.azure.com/virtualNetworkLinks/agent"
+$script:dnsLink.virtualNetwork.id = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName"
+Assert-GuestMonitorDnsLink @{ id = $script:dnsLink.id }
+$script:dnsLink.tags.ownerToken = 'foreign'
+Assert-Rejected { Assert-GuestMonitorDnsLink @{ id = $script:dnsLink.id } }
 $peering = @{ name = 'monitor-guest'; remoteVirtualNetwork = @{
     id = "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-$EnvironmentName" }
     allowVirtualNetworkAccess = $true; allowForwardedTraffic = $false
@@ -136,5 +157,33 @@ $policy.permissions.deny = @()
 Assert-Rejected { Assert-GuestMonitorPolicy $policy }
 foreach ($operation in @('Monitor', 'Telemetry', 'Connect', 'Arm', 'Incident')) {
     & (Join-Path $root 'scripts\Invoke-GuestService.ps1') $operation -SubscriptionId $subscription -EnvironmentName 'dry01' -WhatIf
+}
+Import-Module (Join-Path $root 'scripts\Azure.Common.psm1') -Force
+$directory = Join-Path $root ".azure\guest-monitor-tests-$([guid]::NewGuid().ToString('N'))"
+$null = New-Item -ItemType Directory -Path $directory
+try {
+    $script:queryResult = @{ value = @(@{ message = 'HTTP Error 403: Forbidden' }) }
+    function Invoke-Azure {
+        param([string[]]$Arguments, [int]$TimeoutSeconds)
+        if (($Arguments[0..2] -join ' ') -cne 'vm run-command invoke' -or $Arguments[4] -cne $vmId) {
+            throw 'Unexpected telemetry diagnostic invocation.'
+        }
+        return $script:queryResult
+    }
+    Assert-Rejected { Get-GuestTelemetry }
+    $savedResult = Get-Content -LiteralPath (Join-Path $directory 'guest-monitor-query-result.json') -Raw |
+        ConvertFrom-Json -AsHashtable
+    if ($savedResult.value[0].message -cne $script:queryResult.value[0].message) {
+        throw 'Telemetry failure did not preserve its diagnostic result.'
+    }
+    $evidence.receipt.marker.runId = $script:state.currentFault.runId
+    $script:queryResult.value[0].message = "RETAILTX_TELEMETRY=$($evidence | ConvertTo-Json -Depth 10 -Compress)"
+    $receipt = Get-GuestTelemetry
+    if ($receipt.receipt.ownerToken -cne $script:state.ownerToken -or
+        -not (Test-Path -LiteralPath (Join-Path $directory 'guest-monitor-telemetry.json'))) {
+        throw 'Fresh telemetry receipt was not persisted.'
+    }
+} finally {
+    Remove-Item -LiteralPath $directory -Recurse -Force
 }
 "Guest monitoring contracts passed ($script:checks rejection checks)."

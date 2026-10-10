@@ -7,10 +7,31 @@ function Add-GuestMonitorInventory {
         @("Microsoft.Insights/scheduledQueryRules", "alert-retailtx-guest-$EnvironmentName"),
         @("Microsoft.Network/privateEndpoints", "pe-retailtx-guest-$EnvironmentName-monitor")
     )) { $Expected["$groupId/providers/$($item[0])/$($item[1])"] = $item[0] }
+    if ($script:state['withIsolatedMonitoring']) {
+        $Expected[$script:state.workspaceId] = 'Microsoft.OperationalInsights/workspaces'
+        $Expected[$script:state.dceId] = 'Microsoft.Insights/dataCollectionEndpoints'
+        $Expected[$script:state.privateLinkScopeId] = 'Microsoft.Insights/privateLinkScopes'
+    }
     $Expected["$vmId/extensions/AzureMonitorLinuxAgent"] = 'Microsoft.Compute/virtualMachines/extensions'
     foreach ($zone in @('privatelink.monitor.azure.com', 'privatelink.oms.opinsights.azure.com',
         'privatelink.ods.opinsights.azure.com', 'privatelink.agentsvc.azure-automation.net', 'privatelink.blob.core.windows.net')) {
-        $Expected["$groupId/providers/Microsoft.Network/privateDnsZones/$zone"] = 'Microsoft.Network/privateDnsZones'
+        $zoneId = "$groupId/providers/Microsoft.Network/privateDnsZones/$zone"
+        $Expected[$zoneId] = 'Microsoft.Network/privateDnsZones'
+        foreach ($name in @('guest', 'agent')) {
+            $Expected["$zoneId/virtualNetworkLinks/$name"] = 'Microsoft.Network/privateDnsZones/virtualNetworkLinks'
+        }
+    }
+}
+function Assert-GuestMonitorDnsLink {
+    param([hashtable]$Resource)
+    $name = ($Resource.id -split '/')[-1]
+    if ($name -cnotin @('guest', 'agent')) { throw 'Unexpected monitoring DNS link name.' }
+    $network = if ($name -ceq 'guest') { "vnet-retailtx-guest-$EnvironmentName" } else { "vnet-retailtx-guest-agent-$EnvironmentName" }
+    $link = Invoke-Azure @('network', 'private-dns', 'link', 'vnet', 'show', '--ids', $Resource.id)
+    if ($link.id -ine $Resource.id -or $link.tags.ownerToken -cne $script:state.ownerToken -or
+        $link.virtualNetwork.id -ine "$groupId/providers/Microsoft.Network/virtualNetworks/$network" -or
+        $link.registrationEnabled -ne $false) {
+        throw 'Monitoring DNS link is not bound to its exact owned network without registration.'
     }
 }
 function Assert-GuestMonitorExtension {
@@ -40,13 +61,155 @@ function Assert-GuestMonitorBinding {
     if (-not $script:state.withMonitoring -or -not $script:state.withSreExecution) {
         throw 'Private monitoring requires a fresh fixture created with WithMonitoring and WithSreExecution.'
     }
-    $prefix = "/subscriptions/$subscription/resourceGroups/rg-retailtx-$FoundationEnvironment-$location"
-    if ($script:state.workspaceId -ine "$prefix/providers/Microsoft.OperationalInsights/workspaces/law-retailtx-$FoundationEnvironment" -or
-        $script:state.dceId -ine "$prefix/providers/Microsoft.Insights/dataCollectionEndpoints/dce-retailtx-$FoundationEnvironment" -or
-        $script:state.privateLinkScopeId -ine "$prefix/providers/Microsoft.Insights/privateLinkScopes/ampls-retailtx-$FoundationEnvironment") {
-        throw 'Monitoring binding differs from the explicit retained foundation.'
+    $isolated = $script:state['withIsolatedMonitoring'] -eq $true
+    $prefix = if ($isolated) { $groupId } else { "/subscriptions/$subscription/resourceGroups/rg-retailtx-$FoundationEnvironment-$location" }
+    $suffix = if ($isolated) { "retailtx-guest-$EnvironmentName" } else { "retailtx-$FoundationEnvironment" }
+    if ($script:state.workspaceId -ine "$prefix/providers/Microsoft.OperationalInsights/workspaces/law-$suffix" -or
+        $script:state.dceId -ine "$prefix/providers/Microsoft.Insights/dataCollectionEndpoints/dce-$suffix" -or
+        $script:state.privateLinkScopeId -ine "$prefix/providers/Microsoft.Insights/privateLinkScopes/ampls-$suffix") {
+        throw 'Monitoring binding differs from the exact selected foundation.'
     }
+    if ($isolated -and -not $script:state.workspaceCustomerId -and -not $script:state['isolatedMonitorConfigured']) { return }
     $null = [guid]::Parse($script:state.workspaceCustomerId)
+}
+function Assert-GuestMonitorDnsTopology {
+    param([switch]$RequireComplete)
+    $zones = Invoke-Azure @('rest', '--method', 'get', '--url',
+        "https://management.azure.com/subscriptions/$subscription/providers/Microsoft.Network/privateDnsZones?api-version=2024-06-01")
+    if (-not $zones.ContainsKey('value') -or $zones['nextLink']) { throw 'Incomplete private DNS zone inventory.' }
+    $targetNetworks = @("$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-$EnvironmentName",
+        "$groupId/providers/Microsoft.Network/virtualNetworks/vnet-retailtx-guest-agent-$EnvironmentName")
+    $receipts = @()
+    $seen = @{}
+    foreach ($zone in $zones.value | Where-Object { $_.name -in @('privatelink.monitor.azure.com',
+        'privatelink.oms.opinsights.azure.com', 'privatelink.ods.opinsights.azure.com',
+        'privatelink.agentsvc.azure-automation.net', 'privatelink.blob.core.windows.net') }) {
+        $expectedZoneId = "$groupId/providers/Microsoft.Network/privateDnsZones/$($zone.name)"
+        if ($zone.id -ieq $expectedZoneId -and $zone.tags.ownerToken -cne $script:state.ownerToken) {
+            throw 'Existing fixture Monitor DNS zone is not owned; refusing adoption.'
+        }
+        $links = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com$($zone.id)/virtualNetworkLinks?api-version=2024-06-01")
+        if (-not $links.ContainsKey('value') -or $links['nextLink']) { throw 'Incomplete DNS VNet-link inventory.' }
+        foreach ($link in $links.value) {
+            $deploymentTarget = $zone.id -ieq $expectedZoneId -and $link.id -iin @(
+                "$expectedZoneId/virtualNetworkLinks/guest", "$expectedZoneId/virtualNetworkLinks/agent")
+            if ($deploymentTarget) { Assert-GuestMonitorDnsLink @{ id = $link.id } }
+            if ($link.properties.virtualNetwork.id -inotIn $targetNetworks) { continue }
+            $key = "$($zone.name)|$($link.properties.virtualNetwork.id)"
+            if ($seen.ContainsKey($key) -or $zone.id -ine $expectedZoneId) {
+                throw 'Duplicate or foreign Monitor DNS namespace linked to a fixture VNet.'
+            }
+            if (-not $deploymentTarget) { Assert-GuestMonitorDnsLink @{ id = $link.id } }
+            $seen[$key] = $true
+            $receipts += @{ zoneId = $zone.id; linkId = $link.id; networkId = $link.properties.virtualNetwork.id }
+        }
+    }
+    if ($RequireComplete -and $receipts.Count -ne 10) {
+        throw "Ten exact owned Monitor DNS links are required after deployment; found $($receipts.Count)."
+    }
+    Save-RetailState @{ observedAtUtc = [DateTimeOffset]::UtcNow.ToString('o'); links = $receipts } (Join-Path $directory 'guest-monitor-dns-topology.json')
+}
+function Initialize-GuestMonitorFoundation {
+    Assert-GuestMonitorBinding
+    if (-not $script:state['withIsolatedMonitoring'] -or $script:state['isolatedMonitorConfigured']) { return }
+    if ($script:state['isolatedMonitorAttempted']) { throw 'Isolated monitoring creation already attempted; use Down, not blind replay.' }
+    $existing = @(Invoke-Azure @('resource', 'list', '--resource-group', $groupName))
+    if (@($existing | Where-Object { $_.id -iin @($script:state.workspaceId, $script:state.dceId, $script:state.privateLinkScopeId) }).Count) {
+        throw 'Isolated monitoring resources already exist; refusing adoption.'
+    }
+    $script:state.isolatedMonitorAttempted = $true
+    Save-RetailState $script:state $statePath
+    $path = Join-Path $directory 'guest-monitor-foundation.parameters.json'
+    Save-RetailState @{ parameters = @{ environmentName = @{ value = $EnvironmentName }; tags = @{ value = (Get-OwnedGroup).tags } } } $path
+    Add-GuestJournal @{ action = 'isolated-monitor-deploy'; intentAtUtc = [DateTimeOffset]::UtcNow.ToString('o'); outcome = 'intent' }
+    $deployment = Invoke-Azure @('deployment', 'group', 'create', '--resource-group', $groupName,
+        '--name', 'guest-monitor-foundation', '--template-file', (Join-Path $root 'infra\guest-monitor-foundation.bicep'),
+        '--parameters', "@$path") -TimeoutSeconds 1200
+    if ($deployment.properties.provisioningState -cne 'Succeeded') { throw 'Isolated Monitor foundation unverified; use Down.' }
+    $outputs = ConvertFrom-RetailDeploymentOutputs $deployment.properties.outputs
+    foreach ($field in @('workspaceId', 'dceId', 'privateLinkScopeId')) {
+        if ($outputs[$field.ToUpperInvariant()] -ine $script:state[$field]) { throw 'Unexpected isolated Monitor resource ID.' }
+    }
+    $script:state.workspaceCustomerId = [guid]::Parse($outputs.WORKSPACECUSTOMERID).ToString()
+    $script:state.isolatedMonitorConfigured = $true
+    $script:state.journal[-1].outcome = 'deployment-succeeded'
+    Save-RetailState $script:state $statePath
+}
+function Remove-GuestMonitorFoundation {
+    Assert-GuestMonitorBinding
+    if (-not $script:state['withIsolatedMonitoring']) { throw 'Cannot delete retained monitoring.' }
+    if (-not (Get-OwnedGroup)) { return }
+    $resources = @(Invoke-Azure @('resource', 'list', '--resource-group', $groupName))
+    $scope = @($resources | Where-Object id -IEQ $script:state.privateLinkScopeId)
+    $workspace = @($resources | Where-Object id -IEQ $script:state.workspaceId)
+    $dce = @($resources | Where-Object id -IEQ $script:state.dceId)
+    foreach ($matches in @(@{ items = $scope }, @{ items = $workspace }, @{ items = $dce })) {
+        if ($matches.items.Count -gt 1 -or ($matches.items.Count -and $matches.items[0].tags.ownerToken -cne $script:state.ownerToken)) {
+            throw 'Disposable monitoring ownership changed; no unlink or purge.'
+        }
+    }
+    if ($workspace.Count) {
+        $details = Invoke-Azure @('resource', 'show', '--ids', $script:state.workspaceId, '--api-version', '2025-07-01')
+        if ($details.id -ine $script:state.workspaceId -or $details.tags.ownerToken -cne $script:state.ownerToken) {
+            throw 'Disposable workspace ownership changed; no unlink or purge.'
+        }
+        $backlinks = @(if ($details.properties['privateLinkScopedResources']) { $details.properties.privateLinkScopedResources })
+        if ($backlinks.Count -gt 1 -or @($backlinks | Where-Object {
+            $_.resourceId -ine "$($script:state.privateLinkScopeId)/scopedResources/workspace"
+        }).Count) { throw 'Foreign scope attached to disposable workspace; no unlink or purge.' }
+    }
+    $links = @{ value = @() }
+    if ($scope.Count) {
+        $connections = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com$($script:state.privateLinkScopeId)/privateEndpointConnections?api-version=2021-07-01-preview")
+        if (-not $connections.ContainsKey('value') -or $connections['nextLink'] -or $connections.value.Count -gt 1) {
+            throw 'Incomplete or ambiguous fixture AMPLS endpoint connections; no unlink or purge.'
+        }
+        $endpointId = "$groupId/providers/Microsoft.Network/privateEndpoints/pe-retailtx-guest-$EnvironmentName-monitor"
+        foreach ($connection in $connections.value) {
+            if ($connection.properties.privateEndpoint.id -ine $endpointId -or
+                $connection.id -ine "$($script:state.privateLinkScopeId)/privateEndpointConnections/$($connection.name)") {
+                throw 'Foreign endpoint attached to disposable AMPLS; no unlink or purge.'
+            }
+            $endpoint = Invoke-Azure @('network', 'private-endpoint', 'show', '--ids', $endpointId)
+            if ($endpoint.id -ine $endpointId -or $endpoint.tags.ownerToken -cne $script:state.ownerToken -or
+                @($endpoint.privateLinkServiceConnections).Count -ne 1 -or
+                $endpoint.privateLinkServiceConnections[0].privateLinkServiceId -ine $script:state.privateLinkScopeId) {
+                throw 'Disposable AMPLS endpoint ownership or scope changed; no unlink or purge.'
+            }
+        }
+        $links = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com$($script:state.privateLinkScopeId)/scopedResources?api-version=2021-07-01-preview")
+        if (-not $links.ContainsKey('value') -or $links['nextLink']) { throw 'Incomplete owned scope bindings.' }
+        foreach ($link in $links.value) {
+            $expected = switch -CaseSensitive ($link.name) {
+                'workspace' { $script:state.workspaceId }
+                'data-collection-endpoint' { $script:state.dceId }
+                default { throw 'Unexpected resource bound to fixture AMPLS; refusing deletion.' }
+            }
+            if ($link.properties.linkedResourceId -ine $expected -or
+                $link.id -ine "$($script:state.privateLinkScopeId)/scopedResources/$($link.name)") {
+                throw 'Foreign binding on fixture AMPLS.'
+            }
+        }
+        foreach ($link in $links.value) {
+            $null = Invoke-Azure @('rest', '--method', 'delete', '--url',
+                "https://management.azure.com$($link.id)?api-version=2021-07-01-preview")
+        }
+        $remaining = Invoke-Azure @('rest', '--method', 'get', '--url',
+            "https://management.azure.com$($script:state.privateLinkScopeId)/scopedResources?api-version=2021-07-01-preview")
+        if (-not $remaining.ContainsKey('value') -or $remaining['nextLink'] -or $remaining.value.Count) {
+            throw 'Disposable AMPLS unlinking is incomplete; no workspace purge.'
+        }
+    }
+    if ($workspace.Count) {
+        Add-GuestJournal @{ action = 'purge-owned-workspace'; intentAtUtc = [DateTimeOffset]::UtcNow.ToString('o'); outcome = 'intent' }
+        $null = Invoke-Azure @('monitor', 'log-analytics', 'workspace', 'delete', '--ids',
+            $script:state.workspaceId, '--force', 'true', '--yes') -TimeoutSeconds 300
+        $script:state.journal[-1].outcome = 'delete-returned'
+        Save-RetailState $script:state $statePath
+    }
 }
 function Assert-GuestMonitorPeering {
     param([hashtable]$Peering, [switch]$AgentSide)
@@ -122,6 +285,9 @@ function Assert-GuestMonitorGrant {
 }
 function Remove-GuestMonitorAccess {
     Assert-GuestMonitorBinding
+    if ($script:state['withIsolatedMonitoring'] -and -not (Get-OwnedGroup)) { return }
+    if ($script:state['withIsolatedMonitoring'] -and
+        -not @((Invoke-Azure @('resource', 'list', '--resource-group', $groupName)) | Where-Object id -IEQ $script:state.workspaceId).Count) { return }
     $assignments = @(Invoke-Azure @('role', 'assignment', 'list', '--scope', $script:state.workspaceId,
         '--fill-principal-name', 'false', '--fill-role-definition-name', 'false'))
     $owned = @()
@@ -146,6 +312,7 @@ function Remove-GuestMonitorAccess {
 }
 function Assert-GuestMonitorEndpointAbsent {
     Assert-GuestMonitorBinding
+    if ($script:state['withIsolatedMonitoring'] -and -not (Get-OwnedGroup)) { return }
     $endpointId = "$groupId/providers/Microsoft.Network/privateEndpoints/pe-retailtx-guest-$EnvironmentName-monitor"
     $connections = Invoke-Azure @('rest', '--method', 'get', '--url',
         "https://management.azure.com$($script:state.privateLinkScopeId)/privateEndpointConnections?api-version=2021-07-01-preview")
@@ -159,12 +326,20 @@ function Assert-GuestMonitorEndpointAbsent {
 function Invoke-GuestMonitorDeployment {
     param([switch]$EnableAlert)
     Assert-GuestMonitorBinding
+    Assert-GuestMonitorDnsTopology
+    Initialize-GuestMonitorFoundation
     $workspace = Invoke-Azure @('resource', 'show', '--ids', $script:state.workspaceId, '--api-version', '2025-07-01')
     $dce = Invoke-Azure @('resource', 'show', '--ids', $script:state.dceId, '--api-version', '2023-03-11')
     $scope = Invoke-Azure @('resource', 'show', '--ids', $script:state.privateLinkScopeId, '--api-version', '2021-07-01-preview')
+    if ($script:state['withIsolatedMonitoring']) {
+        foreach ($resource in @($workspace, $dce, $scope)) {
+            if ($resource.tags.ownerToken -cne $script:state.ownerToken) { throw 'Isolated monitoring ownership changed.' }
+        }
+    }
     if ($workspace.properties.customerId -ine $script:state.workspaceCustomerId -or
         $workspace.properties.publicNetworkAccessForIngestion -cne 'Disabled' -or
         $workspace.properties.publicNetworkAccessForQuery -cne 'Disabled' -or
+        $workspace.properties.features.disableLocalAuth -ne $true -or
         $dce.properties.networkAcls.publicNetworkAccess -cne 'Disabled' -or
         $scope.properties.accessModeSettings.ingestionAccessMode -cne 'PrivateOnly' -or
         $scope.properties.accessModeSettings.queryAccessMode -cne 'PrivateOnly') {
@@ -190,6 +365,7 @@ function Invoke-GuestMonitorDeployment {
     $script:state.alertId = $outputs.ALERTID
     $script:state.journal[-1].outcome = 'deployment-succeeded'
     Save-RetailState $script:state $statePath
+    Assert-GuestMonitorDnsTopology -RequireComplete
     $vm = Get-OwnedVm
     Set-GuestMonitorAccess vm ([guid]$vm.identity.principalId)
     Set-GuestMonitorAccess alert ([guid]$outputs.ALERTPRINCIPALID)
@@ -229,9 +405,11 @@ function Get-GuestTelemetry {
         Set-Content -LiteralPath $queryPath -Encoding utf8NoBOM
     $result = Invoke-Azure @('vm', 'run-command', 'invoke', '--ids', $vmId, '--command-id',
         'RunShellScript', '--scripts', "@$queryPath") -TimeoutSeconds 180
+    $resultPath = Join-Path $directory 'guest-monitor-query-result.json'
+    Save-RetailState $result $resultPath
     $text = ($result.value | ForEach-Object message) -join "`n"
     $matches = [regex]::Matches($text, '(?m)^RETAILTX_TELEMETRY=(\{[^\r\n]*\})\r?$')
-    if ($matches.Count -ne 1) { throw 'No unambiguous private telemetry receipt; inspect the operator query result.' }
+    if ($matches.Count -ne 1) { throw "No unambiguous private telemetry receipt; inspect $resultPath." }
     $evidence = $matches[0].Groups[1].Value | ConvertFrom-Json -AsHashtable
     Assert-GuestTelemetry $evidence
     Save-RetailState $evidence (Join-Path $directory 'guest-monitor-telemetry.json')

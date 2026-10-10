@@ -61,6 +61,32 @@ the separate native-action fixture adds only an exact VM-start grant, without
 changing that agent's Review configuration. No budgets or scheduled expiry are
 configured.
 
+### Current Monitor transport decision (2026-10-10)
+
+The user has selected **public HTTPS ingestion/query as the next baseline**
+for the native service incident, with managed identities, Entra RBAC and
+disabled local authentication preserved. The read-only policy review included
+subscription and inherited management-group assignments and found no assigned
+restriction requiring LAW/DCE public access to be disabled. Storage and Key
+Vault Modify policies remain applicable to those services.
+
+The public baseline is **not implemented or live-verified yet**; the existing
+private variants and their failed native comparisons remain documented below.
+Verify fresh AMA ingestion and the selected SRE query mechanism over the public
+path before continuing the Monitor -> SRE -> human approval -> recovery gate.
+Record transport explicitly in lifecycle/readiness evidence and implement
+reset/teardown with the selected mode; do not weaken authentication or fabricate
+private transport success.
+
+AMPLS troubleshooting/full-private Monitor transport is now a deferred
+[optional-profile Spike](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/20),
+not a baseline release blocker where public access is policy-compatible.
+After the native baseline is verified, apply the same default to **future fresh
+Arc profiles**. Preserve the retained working Arc/private foundation until a
+separately implemented replacement or migration is authorized and verified.
+This decision concerns Monitor data transport only, not Arc onboarding,
+Arc control-plane private networking or other services' policy requirements.
+
 ## 1. Assessment and recommendation
 
 At the initial assessment, the checkout contained only the project brief,
@@ -491,7 +517,41 @@ live-verified**: private SRE query support with alternate execution channels
 denied and the full alert/approval/recovery/reset/teardown flow remain acceptance
 gates. See [the native guide](guest-service-scenario.md#azure-monitor-intake-implemented-live-acceptance-pending).
 
-Preserve bounded faults, independent cleanup, private telemetry and fixed-action
+The user-authorized diagnostic variant, `Up -WithSreExecution -WithMonitoring
+-WithIsolatedMonitoring`, provisions a disposable private LAW/DCE/AMPLS instead
+of using the retained foundation. DNS checks reject duplicate/foreign Monitor
+namespaces linked to either fixture VNet. Down unlinks and permanently deletes
+only that owned workspace. This comparison is not a requirement for one workspace
+per VM, a shared-foundation fix or incident acceptance; see
+[the diagnostic boundary](guest-service-scenario.md#isolated-private-monitoring-diagnostic).
+
+**2026-10-10 isolated comparison (`demo27`): same readiness failure.** A new
+owned private LAW/DCE/AMPLS did not avoid query `PrivateLinkValidationFailedError`
+or AMA Syslog-upload HTTP 403. Post-deployment checks attested ten unique owned
+DNS links across the two fixture VNets, correct endpoint NIC addresses and the
+new workspace/AMPLS backlink. The retained Arc private path still returned
+current telemetry. Duplicate same-service DNS zones linked to these VNets were
+not found; the underlying rejection remains unresolved. No fault or incident
+acceptance was attempted. The disposable workspace was purged and checked
+against active/recoverable inventories; resumed Down and repeated absence
+verification removed the fixture and its owned grants/custom role completely.
+
+**2026-10-10 live attempt (`demo26`): blocked at private telemetry readiness.**
+The fresh VM/SRE and monitoring deployments succeeded; local Syslog
+observations and AMA collection configuration were present. Private query
+returned `PrivateLinkValidationFailedError` / HTTP 403 and AMA Syslog uploads
+also returned 403 despite approved endpoint and matching private DNS/AMPLS
+bindings. The cause is unresolved. No fault, automatic investigation, approval
+or repair was attempted, and private-only settings were not relaxed.
+The attempt also exposed teardown inventory omissions for owned DNS links and
+the platform Defender extension; guarded cleanup now attests these exact
+resources rather than accepting arbitrary children. Two live Down calls
+verified fixture absence, external grant/custom-role cleanup and removal of
+its AMPLS endpoint connection; no owned tagged residuals remained. See
+[live findings](guest-service-scenario.md#first-monitored-live-attempt-readiness-blocked).
+
+Preserve bounded faults, independent cleanup, authenticated telemetry with an
+explicit verified transport mode and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic
 Monitor clearance separately without silently replacing the full-flow

@@ -7,6 +7,36 @@ transport before adding a human-approved SRE repair. The optional private
 Azure Monitor intake is now implemented for a fresh isolated fixture, but
 has not passed live acceptance. Approval-free autonomy remains out of scope.
 
+## Monitor transport decision (2026-10-10)
+
+**User-directed baseline:** proceed with public HTTPS Azure Monitor ingestion
+and queries, retaining managed identities, Entra RBAC, disabled local
+authentication and the same Monitor-triggered incident/approval gates. A
+read-only policy review found no assigned LAW/DCE public-access prohibition,
+including inherited management-group assignments. The storage and Key Vault
+public-access restrictions are resource-type specific.
+
+**This is the selected next implementation, not an implemented public switch.**
+The commands below still describe the existing private variant. Do not run
+them expecting a public path, simply change a URL, or enable public access
+on the retained foundation. Public routing/DNS, resource settings, readiness,
+reset and teardown must be implemented and verified together on a fresh fixture.
+The public baseline must prove current AMA ingestion and actual SRE query access
+before any real fault or approval.
+
+AMPLS investigation and a full-private Monitor profile are deferred in
+[the optional private-profile backlog](https://github.com/rutgerpels/retailtx-agentic-ops-demo/issues/20).
+The failed comparisons below remain evidence, not a root-cause fix. Private
+transport is a later customer-policy/profile gate, not a prerequisite for the
+baseline operational story in this subscription.
+
+The same public Monitor baseline is intended for **future fresh Arc profiles**
+after the native path is verified. Keep the retained working Arc host,
+workspace/private endpoints and attested manifests unchanged until an explicit
+replacement/migration is implemented. Deferring Monitor AMPLS does not remove
+Azure Arc, AMA or Azure Monitor, change the Arc control-plane Private Link Scope,
+or authorize changes to other services' private-endpoint requirements.
+
 ## Azure Monitor intake (implemented, live acceptance pending)
 
 Create a **fresh** fixture with both `-WithSreExecution` and `-WithMonitoring`.
@@ -87,6 +117,122 @@ References: [AMA installation and identity](https://learn.microsoft.com/azure/az
 [Syslog collection](https://learn.microsoft.com/azure/azure-monitor/vm/data-collection-syslog),
 [Monitor private-link configuration](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-configure)
 and [DCE requirements](https://learn.microsoft.com/azure/azure-monitor/data-collection/data-collection-endpoint-overview).
+
+### First monitored live attempt: readiness blocked
+
+**2026-10-10, `demo26`: no incident acceptance.** The native VM and isolated
+SRE Agent deployed successfully. Bootstrap confirmed the service healthy and
+the watchdog enabled/active. The monitoring deployment completed with AMA,
+the DCR, an approved AMPLS endpoint and the disabled service-down alert.
+
+The observer produced fresh `RetailTxGuest` JSON locally; AMA received the
+expected local0/Info configuration and workspace destination. However, both
+private query hostnames (`api.loganalytics.io` and `api.loganalytics.azure.com`)
+returned HTTP 403 with `InsufficientAccessError` /
+`PrivateLinkValidationFailedError`. AMA also logged HTTP 403 for Syslog uploads.
+Query DNS resolved to the endpoint's `10.89.0.11`, and the workspace ingestion
+hostname resolved to `10.89.0.6`. ARM readback confirmed the workspace and DCE
+were attached to the exact AMPLS, and the endpoint connection was Approved /
+Succeeded. These checks do **not** establish why service-side validation
+rejected the private requests; the root cause remains unresolved.
+
+No fault, canary, SRE response plan, repair proposal or approval was attempted.
+Public query/ingestion stayed disabled and no permission broadening was used.
+A later operator-only network diagnostic did not return before its local CLI
+process was stopped; that is an unknown command result, not proof of
+non-execution. It was not a fault or repair command.
+
+The first guarded Down also rejected legitimate resources missing from its
+inventory: the ten owned private-DNS VNet links and the untagged platform
+`MDE.Linux` extension. Cleanup now validates each link's exact owned VNet,
+disabled registration and ownership, and accepts only the exact untagged
+Defender publisher/type on the owned VM, alongside the existing policy
+extension. Foreign links, tagged/altered platform extensions and duplicate
+extension IDs remain rejected. Telemetry queries now persist their raw
+operator diagnostic result even when no valid receipt is returned.
+
+**Cleanup verified:** the corrected Down completed at `19:20:45Z`; a second
+Down at `19:21:36Z` confirmed the group absent and zero owned residuals.
+Independent readback found no owner-tagged resources and only the retained
+foundation's endpoint connection on the AMPLS. The fixture's external workspace
+grants and custom action role were removed; retained monitoring resources and
+the shared SRE configuration were not changed.
+
+The next incident attempt must first obtain a fresh private query receipt and
+prove Syslog ingestion. Do not arm the alert or replace private validation with
+public access, different identities or an operator-created investigation.
+
+### Isolated private-monitoring diagnostic
+
+For the user-authorized comparison with a fresh monitoring foundation, add
+`-WithIsolatedMonitoring` to **Up only**, alongside `-WithMonitoring` and
+`-WithSreExecution`. The selection is immutable for that fixture. This creates
+an owned LAW, DCE and AMPLS in the disposable fixture group rather than attaching
+its endpoint to the retained foundation:
+
+```powershell
+.\scripts\Invoke-GuestService.ps1 Up -SubscriptionId $subscription -EnvironmentName $environment -WithSreExecution -WithMonitoring -WithIsolatedMonitoring
+.\scripts\Invoke-GuestService.ps1 Monitor -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Telemetry -SubscriptionId $subscription -EnvironmentName $environment
+# This diagnostic does not require a fault, response plan or repair approval.
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+.\scripts\Invoke-GuestService.ps1 Down -SubscriptionId $subscription -EnvironmentName $environment
+```
+
+Both modes retain private-only query/ingestion and Entra authentication.
+The diagnostic checks relevant subscription-wide DNS zones and links for
+duplicate or foreign Monitor namespaces attached to either fixture VNet;
+ununrelated zones linked elsewhere are allowed. Existing deployment-target links
+are ownership-checked even when they currently point to another VNet. A complete
+ten-link topology is required after deployment. Inspect the saved DNS topology
+and actual query/ingestion results rather than inferring correctness from a
+private address alone. A successful isolated query would narrow the comparison,
+not establish the root cause of the earlier shared-path rejection.
+
+**Destructive cleanup boundary:** isolated Down validates the owned AMPLS
+bindings, disconnects its workspace/DCE and **permanently deletes** the exact
+fixture-owned workspace instead of retaining it in soft deletion. This applies
+only to the explicitly disposable isolated mode; retained foundation monitoring
+is never purged. A partial creation intent must be cleaned up with Down, not
+replayed or adopted. Local receipts remain after teardown.
+
+**2026-10-10, `demo27`: isolated comparison also blocked.** The fresh private
+LAW/DCE/AMPLS and AMA/DCR/disabled-alert deployment succeeded. A post-deployment
+subscription-wide topology check found exactly ten owned DNS links: one link
+for each of the five required namespaces on each fixture VNet, with no duplicate
+or foreign same-namespace links. Query resolved to the owned endpoint NIC's
+`10.89.0.11`, and this new workspace's ODS hostname to `10.89.0.6`. The workspace
+backlink matched its new AMPLS scope ID; the endpoint was Approved / Succeeded.
+Public query/ingestion remained disabled and local authentication disabled.
+
+Nevertheless, both query hostnames returned the same HTTP 403 /
+`PrivateLinkValidationFailedError`, now naming the **new** workspace. AMA logged
+403 for both `LINUX_SYSLOGS_BLOB` and `HEALTH_ASSESSMENT_BLOB` uploads between
+`19:55:58Z` and `19:58:11Z`; its configuration targeted the new workspace and
+private DCE. The independent observer emitted current healthy service/watchdog
+evidence locally. No private telemetry receipt, fault, response plan, incident
+thread or approval was produced.
+
+During the comparison, the retained Arc host still returned fresh private
+Perf/Event evidence through its original `10.84.1.10` endpoint (`19:49:59Z`),
+without configuration or fault changes. The fresh-workspace experiment therefore
+did **not** solve the rejection, and duplicate same-service DNS zones linked to
+the fixture VNets were not observed. This does not establish the underlying
+private-link rejection cause; do not infer a workspace-wide outage or compensate
+with public access or broader permissions.
+
+**Cleanup verified:** the workspace purge returned successfully and independent
+active/recoverable workspace inventories contained no matching workspace.
+The initial group deletion exceeded its bounded wait and reported the remaining
+owned resources without claiming success. Resuming the recorded Down completed
+at `20:14:35Z`; another Down at `20:15:54Z` verified absence again. Independent
+readback found no owned tagged resources, workspace grants or custom action role.
+The isolated workspace, DCE, AMPLS, endpoint, DNS, VM and agent are removed.
+
+Focused local regression checks are `tests\Test-GuestMonitorIsolation.ps1`,
+`tests\Test-GuestServiceMonitor.ps1` and `tests\Test-GuestService.ps1`. They cover
+ownership/privacy boundaries and partial/repeated cleanup, not successful live
+ingestion or incident acceptance.
 
 The fixture represents a posting worker, not the actual RetailTx ERP ledger,
 Service Bus pipeline or business recovery. Do not infer customer impact from
