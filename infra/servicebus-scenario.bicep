@@ -19,11 +19,6 @@ param privateEndpointSubnetId string
 @description('Existing retained Stage 0 VNet, linked to the owned Service Bus private DNS zone.')
 param virtualNetworkId string
 
-@description('System-assigned managed identity principal of the private probe host. No SRE identity is granted queue mutation access.')
-@minLength(36)
-@maxLength(36)
-param probeSystemIdentityPrincipalId string
-
 param location string = resourceGroup().location
 
 var tags = {
@@ -36,15 +31,6 @@ var tags = {
 }
 var namespaceName = 'sbtx${uniqueString(subscription().subscriptionId, environmentName)}'
 var queueName = 'recovery-${environmentName}'
-var senderRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39'
-)
-var receiverRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '4f6d3b9b-027b-4f4c-9142-0e5a2a2247e0'
-)
-
 module broker 'br/public:avm/res/service-bus/namespace:0.17.1' = {
   name: 'service-bus'
   params: {
@@ -67,6 +53,7 @@ module broker 'br/public:avm/res/service-bus/namespace:0.17.1' = {
 
 resource scenarioQueue 'Microsoft.ServiceBus/namespaces/queues@2024-01-01' = {
   name: '${namespaceName}/${queueName}'
+  dependsOn: [broker]
   properties: {
     status: 'Active'
     lockDuration: 'PT30S'
@@ -124,26 +111,6 @@ module privateEndpoint 'br/public:avm/res/network/private-endpoint:0.12.1' = {
   }
 }
 
-resource probeSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(scenarioQueue.id, probeSystemIdentityPrincipalId, senderRoleId)
-  scope: scenarioQueue
-  properties: {
-    principalId: probeSystemIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: senderRoleId
-  }
-}
-
-resource probeReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(scenarioQueue.id, probeSystemIdentityPrincipalId, receiverRoleId)
-  scope: scenarioQueue
-  properties: {
-    principalId: probeSystemIdentityPrincipalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: receiverRoleId
-  }
-}
-
 resource sendFailureAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: 'alert-servicebus-${environmentName}'
   location: 'global'
@@ -189,6 +156,4 @@ output queueName string = queueName
 output queueId string = scenarioQueue.id
 output privateEndpointId string = privateEndpoint.outputs.resourceId
 output privateDnsZoneId string = serviceBusZone.outputs.resourceId
-output probeSenderRoleAssignmentId string = probeSender.id
-output probeReceiverRoleAssignmentId string = probeReceiver.id
 output sendFailureAlertId string = sendFailureAlert.id

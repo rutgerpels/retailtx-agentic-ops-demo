@@ -51,9 +51,11 @@ def assert_private_endpoint(namespace: str) -> None:
 
 def open_store(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
     if path.is_symlink():
         raise ValueError("State database must not be a symbolic link.")
     connection = sqlite3.connect(path, timeout=10)
+    path.chmod(0o600)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA synchronous=FULL")
@@ -79,6 +81,20 @@ def open_store(path: Path) -> sqlite3.Connection:
         """
     )
     return connection
+
+
+def health(path: Path) -> dict[str, Any]:
+    with store(path) as connection:
+        check = connection.execute("PRAGMA quick_check").fetchone()[0]
+        if check != "ok":
+            raise RuntimeError("Durable SQLite state failed its integrity check.")
+        return {
+            "ready": True,
+            "statePath": str(path),
+            "mode": oct(path.stat().st_mode & 0o777),
+            "outboxCount": connection.execute("SELECT COUNT(*) FROM outbox").fetchone()[0],
+            "ledgerCount": connection.execute("SELECT COUNT(*) FROM ledger").fetchone()[0],
+        }
 
 
 @contextmanager
@@ -301,6 +317,7 @@ def _arguments() -> argparse.Namespace:
         "--state", type=Path, required=True, help="Durable SQLite outbox/ledger file"
     )
     subparsers = parser.add_subparsers(dest="operation", required=True)
+    subparsers.add_parser("health")
     seed_parser = subparsers.add_parser("seed")
     seed_parser.add_argument("--transaction-id")
     send_parser = subparsers.add_parser("send")
@@ -318,7 +335,9 @@ def _arguments() -> argparse.Namespace:
 def main() -> int:
     args = _arguments()
     try:
-        if args.operation == "seed":
+        if args.operation == "health":
+            result = health(args.state)
+        elif args.operation == "seed":
             result = seed(args.state, args.transaction_id)
         elif args.operation == "send":
             result = send(args.state, args.namespace, args.queue, args.transaction_id)

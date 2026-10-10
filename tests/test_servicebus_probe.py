@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import sqlite3
@@ -343,3 +344,16 @@ def test_verify_requires_accepted_and_one_matching_post(state_dir: Path) -> None
 
     with pytest.raises(RuntimeError, match="not posted exactly once"):
         probe.verify(path, transaction_id)
+
+
+def test_health_creates_private_durable_database_and_checks_integrity(state_dir: Path) -> None:
+    state_path = state_dir / "state.sqlite"
+
+    result = probe.health(state_path)
+
+    assert result["ready"] is True
+    if os.name != "nt":
+        assert result["mode"] == "0o600"
+        assert state_path.stat().st_mode & 0o077 == 0
+        assert state_dir.stat().st_mode & 0o077 == 0
+    assert probe.health(state_path)["outboxCount"] == 0
