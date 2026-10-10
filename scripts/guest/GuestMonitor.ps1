@@ -10,7 +10,23 @@ function Add-GuestMonitorInventory {
     $Expected["$vmId/extensions/AzureMonitorLinuxAgent"] = 'Microsoft.Compute/virtualMachines/extensions'
     foreach ($zone in @('privatelink.monitor.azure.com', 'privatelink.oms.opinsights.azure.com',
         'privatelink.ods.opinsights.azure.com', 'privatelink.agentsvc.azure-automation.net', 'privatelink.blob.core.windows.net')) {
-        $Expected["$groupId/providers/Microsoft.Network/privateDnsZones/$zone"] = 'Microsoft.Network/privateDnsZones'
+        $zoneId = "$groupId/providers/Microsoft.Network/privateDnsZones/$zone"
+        $Expected[$zoneId] = 'Microsoft.Network/privateDnsZones'
+        foreach ($name in @('guest', 'agent')) {
+            $Expected["$zoneId/virtualNetworkLinks/$name"] = 'Microsoft.Network/privateDnsZones/virtualNetworkLinks'
+        }
+    }
+}
+function Assert-GuestMonitorDnsLink {
+    param([hashtable]$Resource)
+    $name = ($Resource.id -split '/')[-1]
+    if ($name -cnotin @('guest', 'agent')) { throw 'Unexpected monitoring DNS link name.' }
+    $network = if ($name -ceq 'guest') { "vnet-retailtx-guest-$EnvironmentName" } else { "vnet-retailtx-guest-agent-$EnvironmentName" }
+    $link = Invoke-Azure @('network', 'private-dns', 'link', 'vnet', 'show', '--ids', $Resource.id)
+    if ($link.id -ine $Resource.id -or $link.tags.ownerToken -cne $script:state.ownerToken -or
+        $link.virtualNetwork.id -ine "$groupId/providers/Microsoft.Network/virtualNetworks/$network" -or
+        $link.registrationEnabled -ne $false) {
+        throw 'Monitoring DNS link is not bound to its exact owned network without registration.'
     }
 }
 function Assert-GuestMonitorExtension {
@@ -229,9 +245,11 @@ function Get-GuestTelemetry {
         Set-Content -LiteralPath $queryPath -Encoding utf8NoBOM
     $result = Invoke-Azure @('vm', 'run-command', 'invoke', '--ids', $vmId, '--command-id',
         'RunShellScript', '--scripts', "@$queryPath") -TimeoutSeconds 180
+    $resultPath = Join-Path $directory 'guest-monitor-query-result.json'
+    Save-RetailState $result $resultPath
     $text = ($result.value | ForEach-Object message) -join "`n"
     $matches = [regex]::Matches($text, '(?m)^RETAILTX_TELEMETRY=(\{[^\r\n]*\})\r?$')
-    if ($matches.Count -ne 1) { throw 'No unambiguous private telemetry receipt; inspect the operator query result.' }
+    if ($matches.Count -ne 1) { throw "No unambiguous private telemetry receipt; inspect $resultPath." }
     $evidence = $matches[0].Groups[1].Value | ConvertFrom-Json -AsHashtable
     Assert-GuestTelemetry $evidence
     Save-RetailState $evidence (Join-Path $directory 'guest-monitor-telemetry.json')

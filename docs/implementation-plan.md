@@ -491,6 +491,20 @@ live-verified**: private SRE query support with alternate execution channels
 denied and the full alert/approval/recovery/reset/teardown flow remain acceptance
 gates. See [the native guide](guest-service-scenario.md#azure-monitor-intake-implemented-live-acceptance-pending).
 
+**2026-10-10 live attempt (`demo26`): blocked at private telemetry readiness.**
+The fresh VM/SRE and monitoring deployments succeeded; local Syslog
+observations and AMA collection configuration were present. Private query
+returned `PrivateLinkValidationFailedError` / HTTP 403 and AMA Syslog uploads
+also returned 403 despite approved endpoint and matching private DNS/AMPLS
+bindings. The cause is unresolved. No fault, automatic investigation, approval
+or repair was attempted, and private-only settings were not relaxed.
+The attempt also exposed teardown inventory omissions for owned DNS links and
+the platform Defender extension; guarded cleanup now attests these exact
+resources rather than accepting arbitrary children. Two live Down calls
+verified fixture absence, external grant/custom-role cleanup and removal of
+its AMPLS endpoint connection; no owned tagged residuals remained. See
+[live findings](guest-service-scenario.md#first-monitored-live-attempt-readiness-blocked).
+
 Preserve bounded faults, independent cleanup, private telemetry and fixed-action
 permissions. Changing a fault alone does not remove log-alert clearance or
 evidence-ingestion delays; measure verified fixture recovery/RCA and automatic

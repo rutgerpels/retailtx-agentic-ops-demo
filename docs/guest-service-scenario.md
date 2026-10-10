@@ -88,6 +88,50 @@ References: [AMA installation and identity](https://learn.microsoft.com/azure/az
 [Monitor private-link configuration](https://learn.microsoft.com/azure/azure-monitor/fundamentals/private-link-configure)
 and [DCE requirements](https://learn.microsoft.com/azure/azure-monitor/data-collection/data-collection-endpoint-overview).
 
+### First monitored live attempt: readiness blocked
+
+**2026-10-10, `demo26`: no incident acceptance.** The native VM and isolated
+SRE Agent deployed successfully. Bootstrap confirmed the service healthy and
+the watchdog enabled/active. The monitoring deployment completed with AMA,
+the DCR, an approved AMPLS endpoint and the disabled service-down alert.
+
+The observer produced fresh `RetailTxGuest` JSON locally; AMA received the
+expected local0/Info configuration and workspace destination. However, both
+private query hostnames (`api.loganalytics.io` and `api.loganalytics.azure.com`)
+returned HTTP 403 with `InsufficientAccessError` /
+`PrivateLinkValidationFailedError`. AMA also logged HTTP 403 for Syslog uploads.
+Query DNS resolved to the endpoint's `10.89.0.11`, and the workspace ingestion
+hostname resolved to `10.89.0.6`. ARM readback confirmed the workspace and DCE
+were attached to the exact AMPLS, and the endpoint connection was Approved /
+Succeeded. These checks do **not** establish why service-side validation
+rejected the private requests; the root cause remains unresolved.
+
+No fault, canary, SRE response plan, repair proposal or approval was attempted.
+Public query/ingestion stayed disabled and no permission broadening was used.
+A later operator-only network diagnostic did not return before its local CLI
+process was stopped; that is an unknown command result, not proof of
+non-execution. It was not a fault or repair command.
+
+The first guarded Down also rejected legitimate resources missing from its
+inventory: the ten owned private-DNS VNet links and the untagged platform
+`MDE.Linux` extension. Cleanup now validates each link's exact owned VNet,
+disabled registration and ownership, and accepts only the exact untagged
+Defender publisher/type on the owned VM, alongside the existing policy
+extension. Foreign links, tagged/altered platform extensions and duplicate
+extension IDs remain rejected. Telemetry queries now persist their raw
+operator diagnostic result even when no valid receipt is returned.
+
+**Cleanup verified:** the corrected Down completed at `19:20:45Z`; a second
+Down at `19:21:36Z` confirmed the group absent and zero owned residuals.
+Independent readback found no owner-tagged resources and only the retained
+foundation's endpoint connection on the AMPLS. The fixture's external workspace
+grants and custom action role were removed; retained monitoring resources and
+the shared SRE configuration were not changed.
+
+The next incident attempt must first obtain a fresh private query receipt and
+prove Syslog ingestion. Do not arm the alert or replace private validation with
+public access, different identities or an operator-created investigation.
+
 The fixture represents a posting worker, not the actual RetailTx ERP ledger,
 Service Bus pipeline or business recovery. Do not infer customer impact from
 its localhost health or worker progress.

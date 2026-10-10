@@ -276,6 +276,24 @@ $script:checks++
 $script:inventory += @{ id = $policyId; type = 'Microsoft.Compute/virtualMachines/extensions'; tags = @{} }
 Assert-GuestTeardownInventory
 $script:checks++
+$defenderId = "$vmId/extensions/MDE.Linux"
+$defenderExtension = @{ id = $defenderId; name = 'MDE.Linux'; type = 'Microsoft.Compute/virtualMachines/extensions'
+    location = $location; tags = $null; properties = @{ publisher = 'Microsoft.Azure.AzureDefenderForServers'; type = 'MDE.Linux' } }
+$script:inventory += @{ id = $defenderId; type = 'Microsoft.Compute/virtualMachines/extensions'; tags = @{} }
+$script:extensions += $defenderExtension
+Assert-GuestTeardownInventory
+$script:checks++
+foreach ($field in @('publisher', 'type')) {
+    $old = $defenderExtension.properties[$field]
+    $defenderExtension.properties[$field] = 'foreign'
+    Assert-Rejected { Assert-GuestTeardownInventory }
+    $defenderExtension.properties[$field] = $old
+}
+$defenderExtension.tags = @{ ownerToken = 'foreign' }
+Assert-Rejected { Assert-GuestTeardownInventory }
+$defenderExtension.tags = $null
+$script:inventory = @($script:inventory[0..1])
+$script:extensions = @($policyExtension)
 $script:inventory[0].tags.ownerToken = 'foreign'
 Assert-Rejected { Assert-GuestTeardownInventory }
 $script:inventory[0].tags.ownerToken = $script:state.ownerToken
