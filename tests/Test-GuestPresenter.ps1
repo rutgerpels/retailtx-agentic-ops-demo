@@ -81,8 +81,8 @@ function Invoke-Azure {
             )[0]
             $start = [DateTimeOffset]$record.submittedAtUtc
             return @(
-                @{ resourceId = $vmId; caller = $record.request.actor; correlationId = 'one'; operationName = @{ value = 'Microsoft.Compute/virtualMachines/runCommand/action' }; status = @{ value = 'Started' }; eventTimestamp = $start.ToString('o') },
-                @{ resourceId = $vmId; caller = $record.request.actor; correlationId = 'one'; operationName = @{ value = 'Microsoft.Compute/virtualMachines/runCommand/action' }; status = @{ value = 'Succeeded' }; eventTimestamp = $start.ToString('o') }
+                @{ resourceId = $vmId; caller = 'operator@example.invalid'; claims = @{ 'http://schemas.microsoft.com/identity/claims/objectidentifier' = $record.request.actor }; correlationId = 'one'; operationName = @{ value = 'Microsoft.Compute/virtualMachines/runCommand/action' }; status = @{ value = 'Started' }; eventTimestamp = $start.ToString('o') },
+                @{ resourceId = $vmId; caller = 'operator@example.invalid'; claims = @{ 'http://schemas.microsoft.com/identity/claims/objectidentifier' = $record.request.actor }; correlationId = 'one'; operationName = @{ value = 'Microsoft.Compute/virtualMachines/runCommand/action' }; status = @{ value = 'Succeeded' }; eventTimestamp = $start.ToString('o') }
             )
         }
         'vm run-command' {

@@ -195,7 +195,8 @@ function Get-GuestPresenterAudit {
         '--end-time', $start.AddMinutes(30).ToUniversalTime().ToString('o'), '--max-events', '100'))
     $action = @($events | Where-Object { $_.resourceId -ieq $vmId -and
         $_.operationName.value -ieq 'Microsoft.Compute/virtualMachines/runCommand/action' -and
-        $_.caller -ieq $Record.request.actor })
+        $_['claims'] -and
+        $_.claims['http://schemas.microsoft.com/identity/claims/objectidentifier'] -ieq $Record.request.actor })
     $ids = @($action | Where-Object { $_.status.value -iin @('Started', 'Accepted') -and
         [DateTimeOffset]$_.eventTimestamp -ge $start -and
         [DateTimeOffset]$_.eventTimestamp -le $start.AddMinutes(2) } |

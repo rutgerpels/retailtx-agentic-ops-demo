@@ -41,6 +41,9 @@ For the retained native fixture, use the numbered
 [preparation](docs/presenter/guest-preparation.md) and
 [live presenter](docs/presenter/guest-live.md) sheets with Bash or PowerShell
 one-liners. Preparation does not inject a fault.
+The new [standalone lifecycle](docs/demo-lifecycle.md) deploys an independent
+single-agent replacement with Bicep; fresh readiness is verified, while full
+GitHub and teardown/rebuild acceptance remain open.
 
 An [operator-first Windows Arc disk incident](docs/disk-scenario.md) has now
 worked on three fresh fixtures, including a same-fixture reset and second incident:

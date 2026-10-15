@@ -31,6 +31,9 @@ Inject a test fault. New fixtures require explicit Repair/Reset; no auto-recover
 On Up only, create a separate Review-mode SRE Agent and UAMI in the fixture
 resource group, with VM-scoped Run Command permission and isolated VNet.
 Includes documented group monitoring readers and subscription Monitoring Contributor.
+.PARAMETER Standalone
+Up only: create an independent public monitored SRE fixture without a retained
+foundation manifest or retained-agent grants. Later operations use recorded mode.
 .PARAMETER WithMonitoring
 On Up only, prepare AMA monitoring. Without WithSreExecution, only public
 monitor-only diagnostics are supported; no SRE or retained identity grants.
@@ -66,6 +69,7 @@ param(
     [guid]$RunId,
     [switch]$Canary,
     [switch]$WithSreExecution,
+    [switch]$Standalone,
     [switch]$WithMonitoring,
     [switch]$WithRecoverySkill,
     [ValidateSet('Public', 'Private')][string]$MonitorTransport = 'Public',
@@ -82,6 +86,11 @@ Assert-Stage0Name $FoundationEnvironment
 if ($EnvironmentName -ceq $FoundationEnvironment) { throw 'Fixture must not reuse the foundation environment.' }
 if ($Canary -and $Operation -cne 'Fault') { throw 'Canary applies only to Fault.' }
 if ($WithSreExecution -and $Operation -cne 'Up') { throw 'WithSreExecution applies only to Up.' }
+if ($Standalone -and ($Operation -cne 'Up' -or -not $WithSreExecution -or
+    -not $WithMonitoring -or $MonitorTransport -ine 'Public' -or $MonitorReadMode -ine 'Operator' -or
+    $WithIsolatedMonitoring)) {
+    throw 'Standalone requires Up with SRE execution, public monitoring and Operator reads.'
+}
 if ($WithRecoverySkill -and $Operation -cne 'Connect') { throw 'WithRecoverySkill applies only to Connect.' }
 if ($WithMonitoring -and $Operation -cne 'Up') {
     throw 'WithMonitoring applies only to Up.'
@@ -168,6 +177,16 @@ function Assert-ExactHash {
 }
 
 function Assert-GuestManifest {
+    if ($script:state.ContainsKey('standalone') -and $script:state.standalone -isnot [bool]) {
+        throw 'Invalid standalone deployment mode.'
+    }
+    if ($script:state['standalone'] -and (-not $script:state.withSreExecution -or
+        -not $script:state.withMonitoring -or $script:state.monitorTransport -cne 'Public' -or
+        $script:state.monitorReadMode -cne 'Operator' -or $script:state.withIsolatedMonitoring -or
+        $script:state.retainedAgentId -or $script:state.retainedAgentIdentityId -or
+        $script:state.retainedAgentPrincipalId -or $script:state.readerAssignmentId)) {
+        throw 'Standalone fixture must own its SRE/monitoring and have no retained identity binding.'
+    }
     if (-not $script:state.ContainsKey('withSreExecution') -and $script:state.schemaVersion -eq 1) {
         $script:state.withSreExecution = $false
     }
@@ -213,10 +232,11 @@ function Assert-GuestManifest {
     if ($script:state.withSreExecution) {
         if ($script:state.agentId -cne "$groupId/providers/Microsoft.App/agents/sre-retailtx-guest-agent-$EnvironmentName" -or
             $script:state.agentIdentityId -cne "$groupId/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-retailtx-guest-agent-$EnvironmentName" -or
+            (-not $script:state['standalone'] -and (
             $script:state.retainedAgentId -notlike "/subscriptions/$subscription/resourceGroups/*/providers/Microsoft.App/agents/*" -or
             $script:state.retainedAgentIdentityId -notlike "/subscriptions/$subscription/resourceGroups/*/providers/Microsoft.ManagedIdentity/userAssignedIdentities/*" -or
             $script:state.retainedAgentId -ieq $script:state.agentId -or
-            $script:state.retainedAgentIdentityId -ieq $script:state.agentIdentityId) {
+            $script:state.retainedAgentIdentityId -ieq $script:state.agentIdentityId))) {
             throw 'Isolated guest SRE Agent or retained foundation binding is invalid.'
         }
         if ($script:state.retainedAgentPrincipalId) { $null = [guid]::Parse($script:state.retainedAgentPrincipalId) }
@@ -1009,10 +1029,11 @@ function Get-GuestBaseDeploymentParameters {
         ownerToken = @{ value = $script:state.ownerToken }
         expiresAt = @{ value = $script:state.expiresAt }
         adminSshPublicKey = @{ value = $AdminSshPublicKey }
-        agentPrincipalId = @{ value = $script:state.retainedAgentPrincipalId }
+        agentPrincipalId = @{ value = if ($script:state['standalone']) { '' } else { $script:state.retainedAgentPrincipalId } }
     }
     if ($script:state.ContainsKey('withMonitoring')) { $parameters.withMonitoring = @{ value = $script:state.withMonitoring } }
-    $parameters.assignRetainedReader = @{ value = -not ($script:state['withMonitoring'] -and -not $script:state['withSreExecution']) }
+    $parameters.assignRetainedReader = @{ value = -not $script:state['standalone'] -and
+        -not ($script:state['withMonitoring'] -and -not $script:state['withSreExecution']) }
     $parameters.monitorTransport = @{ value = (Get-GuestMonitorTransport) }
     return $parameters
 }
@@ -1436,13 +1457,23 @@ try {
         Get-GuestOutput -GroupExists $false -PowerState 'absent' -Evidence $null
         return
     }
-    $foundationPath = Join-Path $root ".azure\$FoundationEnvironment\retailtx-state.json"
-    $foundation = Get-Content -LiteralPath $foundationPath -Raw | ConvertFrom-Json -AsHashtable
-    if ($foundation.schemaVersion -ne 1 -or $foundation.subscriptionId -ine $subscription -or
-        $foundation.tenantId -ine $account.tenantId -or $foundation.environmentName -cne $FoundationEnvironment) {
-        throw 'Retained foundation and CLI identity do not match explicit subscription/tenant.'
+    $independent = if ($script:state -and $script:state.phase -cne 'deleted') {
+        $script:state['standalone'] -eq $true
+    } else { $Standalone.IsPresent }
+    if ($Operation -ceq 'Up' -and $script:state -and $script:state.phase -cne 'deleted' -and
+        $independent -ne $Standalone.IsPresent) { throw 'Standalone mode is immutable; use the recorded deployment mode.' }
+    $foundation = $null
+    if ($independent) {
+        $binding = @{ agentId = $null; agentIdentityId = $null; agentPrincipalId = $null }
+    } else {
+        $foundationPath = Join-Path $root ".azure\$FoundationEnvironment\retailtx-state.json"
+        $foundation = Get-Content -LiteralPath $foundationPath -Raw | ConvertFrom-Json -AsHashtable
+        if ($foundation.schemaVersion -ne 1 -or $foundation.subscriptionId -ine $subscription -or
+            $foundation.tenantId -ine $account.tenantId -or $foundation.environmentName -cne $FoundationEnvironment) {
+            throw 'Retained foundation and CLI identity do not match explicit subscription/tenant.'
+        }
+        $binding = Get-RetainedGuestIdentity $foundation
     }
-    $binding = Get-RetainedGuestIdentity $foundation
     $sourceHashes = Get-SourceHash
     $artifactHashes = Get-ArtifactHash
     if ($script:state -and $script:state.phase -cne 'deleted') {
@@ -1496,6 +1527,7 @@ try {
                 expiresAt = [DateTimeOffset]::UtcNow.AddHours(4).ToString('o')
                 journal = @(); pendingCommand = $null; currentFault = $null; lastEvidence = $null
                 withSreExecution = $WithSreExecution.IsPresent
+                standalone = $Standalone.IsPresent
                 withMonitoring = $WithMonitoring.IsPresent
                 withIsolatedMonitoring = $WithIsolatedMonitoring.IsPresent
                 monitorTransport = if ($WithMonitoring) { $MonitorTransport } else { 'Private' }
